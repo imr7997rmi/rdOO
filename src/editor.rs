@@ -40,7 +40,13 @@ impl Editor {
                 pw.insert(acc, serde_json::Value::Bool(true));
             }
         }
-        let init = serde_json::json!({ "version": VERSION, "hosts": file.hosts, "logins": file.logins, "pw": pw });
+        let init = serde_json::json!({
+            "version": VERSION,
+            "build": crate::update::current_build(),
+            "hosts": file.hosts,
+            "logins": file.logins,
+            "pw": pw
+        });
         let webview = WebViewBuilder::new()
             .with_html(HTML)
             .with_initialization_script(format!("window.RDOO_INIT = {init};"))

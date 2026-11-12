@@ -14,12 +14,12 @@ fn viewer_path() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("RDOO_VIEWER") {
         return Some(PathBuf::from(p));
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join("ironrdp-viewer");
-            if p.exists() {
-                return Some(p);
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let p = dir.join("ironrdp-viewer");
+        if p.exists() {
+            return Some(p);
         }
     }
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/IronRDP/target/release/ironrdp-viewer");

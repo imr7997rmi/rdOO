@@ -25,14 +25,33 @@ for p in patches/*.patch; do
   git -C vendor/IronRDP apply --check "$ROOT/$p" 2>/dev/null && git -C vendor/IronRDP apply "$ROOT/$p" && echo "Parche aplicado: $p"
 done
 
-(cd vendor/IronRDP && cargo build --release -p ironrdp-viewer --features openh264)
-cargo build --release
+# Binario universal (Intel + Apple Silicon). UNIVERSAL=0 compila solo para este Mac.
+if [ "${UNIVERSAL:-1}" = "1" ]; then
+  rustup target add x86_64-apple-darwin aarch64-apple-darwin >/dev/null 2>&1 || true
+  (cd vendor/IronRDP && rustup target add x86_64-apple-darwin aarch64-apple-darwin >/dev/null 2>&1 || true)
+  for target in x86_64-apple-darwin aarch64-apple-darwin; do
+    (cd vendor/IronRDP && cargo build --release --target "$target" -p ironrdp-viewer --features openh264)
+    cargo build --release --target "$target"
+  done
+  lipo -create -output target/release/rdoo-universal \
+    target/x86_64-apple-darwin/release/rdoo target/aarch64-apple-darwin/release/rdoo
+  lipo -create -output target/release/ironrdp-viewer-universal \
+    vendor/IronRDP/target/x86_64-apple-darwin/release/ironrdp-viewer \
+    vendor/IronRDP/target/aarch64-apple-darwin/release/ironrdp-viewer
+  RDOO_BIN=target/release/rdoo-universal
+  VIEWER_BIN=target/release/ironrdp-viewer-universal
+else
+  (cd vendor/IronRDP && cargo build --release -p ironrdp-viewer --features openh264)
+  cargo build --release
+  RDOO_BIN=target/release/rdoo
+  VIEWER_BIN=vendor/IronRDP/target/release/ironrdp-viewer
+fi
 
 # Se construye y firma fuera de Documents (iCloud añade atributos que rompen codesign).
 APP="$(mktemp -d)/rdOO.app"
 mkdir -p "$APP/Contents/MacOS"
-cp target/release/rdoo "$APP/Contents/MacOS/rdoo"
-cp vendor/IronRDP/target/release/ironrdp-viewer "$APP/Contents/MacOS/ironrdp-viewer"
+cp "$RDOO_BIN" "$APP/Contents/MacOS/rdoo"
+cp "$VIEWER_BIN" "$APP/Contents/MacOS/ironrdp-viewer"
 strip -x "$APP/Contents/MacOS/ironrdp-viewer"
 
 # Icono (.icns) desde assets/icon.png
@@ -46,6 +65,7 @@ done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 VERSION="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+BUILD="$(date +%Y%m%d.%H%M)"
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -54,7 +74,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleName</key><string>rdOO</string>
   <key>CFBundleDisplayName</key><string>rdOO</string>
   <key>CFBundleIdentifier</key><string>io.github.rdoo</string>
-  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$BUILD</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleExecutable</key><string>rdoo</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -71,7 +91,7 @@ codesign --force --deep -s - "$APP"
 mkdir -p "$ROOT/dist"
 rm -rf "$ROOT/dist/rdOO.app"
 ditto --norsrc "$APP" "$ROOT/dist/rdOO.app"
-echo "OK: $ROOT/dist/rdOO.app (v$VERSION)"
+echo "OK: $ROOT/dist/rdOO.app (v$VERSION, compilación $BUILD)"
 
 if [ "$1" = "--install" ]; then
   mkdir -p "$HOME/Applications"

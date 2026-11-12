@@ -9,6 +9,7 @@ Cliente RDP ultraligero para macOS, en Rust.
 - **Usuarios reutilizables**: un mismo usuario/contraseña para varias conexiones (pestaña «Usuarios» del editor).
 - **Editor visual** de conexiones (menú «Ajustes…» (⌘,)): añadir, duplicar, ordenar y configurar sin tocar el archivo.
 - La versión se ve en la barra de menú, en «Acerca de rdOO» y en el editor.
+- **Actualizaciones**: menú rdOO → «Buscar actualizaciones…» o Ajustes → General. Descarga el ZIP publicado, verifica su SHA-256 y se reinstala sola al cerrar.
 - Icono de la app: `assets/icon.png` (el `.icns` se genera en `scripts/bundle.sh`).
 - Lista en **iCloud Drive** (`iCloud Drive/rdOO/hosts.toml`), sincronizada entre Macs y recargada automáticamente al cambiar.
 - Contraseñas en el **Llavero de macOS** (servicio `rdOO`), nunca en iCloud ni en el archivo.
@@ -25,7 +26,10 @@ src/launch.rs    lanza ironrdp-viewer con la contraseña por variable de entorno
 src/ui.rs        diálogos nativos vía osascript
 src/editor.rs    editor visual (tao + wry/WKWebView), interfaz en src/editor.html
 src/dock.rs      menú del clic derecho en el Dock
+src/update.rs    feed de actualizaciones, descarga, SHA-256 e instalación
+src/update.html  ventana de actualización (wry)
 scripts/bundle.sh  compila todo y genera dist/rdOO.app
+scripts/publish-update.sh  publica rdOO-latest.zip/json en el servidor de apps
 vendor/IronRDP   IronRDP (lo descarga bundle.sh, versión fijada; no está en el repo)
 patches/         parche propio sobre IronRDP (bundle.sh lo aplica):
                  - redimensionado dinámico con EGFX sin reconectar
@@ -86,6 +90,19 @@ user = "usuario"
 # cmd_is_windows = true       # Cmd = tecla Windows (por defecto Cmd = Ctrl)
 # args = ["--audio-latency", "200"]   # opciones extra de ironrdp-viewer
 ```
+
+## Actualizaciones
+
+El feed está en `https://raw.githubusercontent.com/imr7997rmi/nivvoo-apps/main/rdOO-latest.json`
+y el ZIP se descarga desde la misma carpeta. La comparación se hace por el campo
+`build` (fecha y hora de compilación, `CFBundleVersion`). Para publicar:
+
+```sh
+scripts/bundle.sh
+scripts/publish-update.sh rdOO dist/rdOO.app
+```
+
+`RDOO_UPDATE_URL` permite apuntar a un feed alternativo (pruebas).
 
 ## Contraseñas
 

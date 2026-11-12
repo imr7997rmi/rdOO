@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+:root {
+  --bg: #ffffff; --text: #1d1d1f; --muted: #86868b; --line: #e5e5e7;
+  --field: #f2f2f4; --accent: #2f6fef; --accent-text: #fff; --danger: #d93025;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e; --text: #f2f2f2; --muted: #8e8e93; --line: #2c2c2e;
+    --field: #2a2a2c; --accent: #4f86f7; --danger: #ff6b5e;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 13px -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg); color: var(--text);
+  display: flex; flex-direction: column;
+  -webkit-user-select: none; user-select: none;
+}
+main { padding: 24px 28px 18px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+h1 { margin: 0 0 10px; font-size: 17px; font-weight: 600; }
+p { margin: 0; line-height: 1.45; }
+#message { color: var(--text); }
+#notes { color: var(--muted); margin-top: 10px; white-space: pre-wrap; overflow: auto; max-height: 88px; }
+#current { color: var(--muted); font-size: 12px; margin-top: auto; padding-top: 12px; }
+#progress { margin-top: 18px; }
+.track { height: 8px; border-radius: 4px; background: var(--field); overflow: hidden; }
+#fill { height: 100%; width: 0; background: var(--accent); transition: width .12s linear; }
+#detail { color: var(--muted); font-size: 12px; margin-top: 7px; }
+#actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+button {
+  font: inherit; color: var(--text); background: var(--field);
+  border: 0; border-radius: 7px; padding: 7px 16px;
+}
+button:active { opacity: .7; }
+button.primary { background: var(--accent); color: var(--accent-text); }
+button[hidden] { display: none; }
+.hidden { display: none !important; }
+.spinner {
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 2px solid var(--field); border-top-color: var(--accent);
+  display: inline-block; vertical-align: -2px; margin-right: 7px;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<main>
+  <h1><span id="spinner" class="spinner hidden"></span><span id="title"></span></h1>
+  <p id="message"></p>
+  <div id="notes" class="hidden"></div>
+  <div id="progress" class="hidden">
+    <div class="track"><div id="fill"></div></div>
+    <div id="detail"></div>
+  </div>
+  <div id="current"></div>
+  <div id="actions">
+    <button id="secondary" hidden>Cancelar</button>
+    <button id="primary" class="primary" hidden>Actualizar</button>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const send = (msg) => window.ipc.postMessage(JSON.stringify(msg));
+let current = {};
+
+function rdooUpdate(view) {
+  current = view || {};
+  const mode = current.mode || "info";
+  $("title").textContent = current.title || "";
+  $("message").textContent = current.message || "";
+  $("current").textContent = current.current || "";
+
+  const notes = $("notes");
+  notes.textContent = current.notes || "";
+  notes.classList.toggle("hidden", !current.notes);
+
+  const showProgress = mode === "downloading" || mode === "installing";
+  $("progress").classList.toggle("hidden", !showProgress);
+  if (showProgress) {
+    $("fill").style.width = Math.round((current.progress || 0) * 100) + "%";
+    $("detail").textContent = current.detail || "";
+  }
+  $("spinner").classList.toggle("hidden", !(mode === "checking" || mode === "installing"));
+
+  const primary = $("primary");
+  const secondary = $("secondary");
+  primary.className = "primary";
+
+  if (mode === "available") {
+    primary.textContent = "Actualizar";
+    primary.hidden = false;
+    secondary.textContent = "Cancelar";
+    secondary.hidden = false;
+  } else if (mode === "downloading") {
+    primary.hidden = true;
+    secondary.textContent = "Cancelar";
+    secondary.hidden = false;
+  } else if (mode === "checking" || mode === "installing") {
+    primary.hidden = true;
+    secondary.hidden = true;
+  } else {
+    primary.textContent = "OK";
+    primary.hidden = false;
+    secondary.hidden = true;
+  }
+}
+
+$("primary").onclick = () => {
+  if (current.mode === "available") send({ cmd: "download" });
+  else send({ cmd: "close" });
+};
+$("secondary").onclick = () => {
+  if (current.mode === "downloading") send({ cmd: "cancel" });
+  else send({ cmd: "close" });
+};
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    send({ cmd: current.mode === "downloading" ? "cancel" : "close" });
+  } else if (e.key === "Enter" && !$("primary").hidden) {
+    $("primary").click();
+  }
+});
+rdooUpdate(window.RDOO_UPDATE_VIEW || {});
+</script>
+</body>
+</html>

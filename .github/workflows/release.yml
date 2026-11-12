@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Dependencias
+        run: |
+          command -v cmake >/dev/null || brew install cmake
+
+      - name: Versión desde la etiqueta
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i '' "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+
+      - name: Compilar app universal
+        run: UNIVERSAL=1 ./scripts/bundle.sh
+
+      - name: Comprimir app
+        run: ditto -c -k --sequesterRsrc --keepParent dist/rdOO.app dist/rdOO.zip
+
+      - name: Publicar feed y ZIP en el servidor
+        env:
+          NIVVOO_SSH_KEY: ${{ secrets.NIVVOO_SSH_KEY }}
+        run: |
+          printf '%s\n' "$NIVVOO_SSH_KEY" > "$RUNNER_TEMP/nivvoo_key"
+          chmod 600 "$RUNNER_TEMP/nivvoo_key"
+          NIVVOO_SSH_KEY="$RUNNER_TEMP/nivvoo_key" ./scripts/publish-update.sh rdOO
+
+      - name: Publicar feed y ZIP en el repo público
+        uses: actions/checkout@v4
+        with:
+          repository: imr7997rmi/nivvoo-apps
+          ssh-key: ${{ secrets.APPS_DEPLOY_KEY }}
+          path: apps-repo
+          ref: main
+
+      - name: Actualizar repo público
+        run: |
+          cp dist/rdOO-latest.zip dist/rdOO-latest.json apps-repo/
+          cd apps-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add rdOO-latest.zip rdOO-latest.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "rdOO ${{ github.ref_name }}"
+          git push origin main
+
+      - name: Publicar release de versión
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: rdOO ${{ github.ref_name }}
+          files: dist/rdOO.zip
+          generate_release_notes: true
+
+      - name: Mover etiqueta latest
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f latest "$GITHUB_SHA"
+          git push -f origin latest
+
+      - name: Publicar última build
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "rdOO — última build"
+          prerelease: true
+          files: dist/rdOO.zip
+          body: "Build automática de main: ${{ github.sha }}"

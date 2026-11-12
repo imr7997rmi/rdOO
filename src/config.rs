@@ -173,12 +173,12 @@ user = "usuario"               # o bien: login = "Admin oficina"
 
 pub fn ensure_exists(path: &Path) {
     // Migración desde el nombre anterior (rdAPP): mover la carpeta si la nueva no existe.
-    if !path.exists() {
-        if let Some(dir) = path.parent() {
-            let old = dir.with_file_name("rdAPP");
-            if old.join("hosts.toml").exists() && !dir.exists() {
-                let _ = std::fs::rename(&old, dir);
-            }
+    if !path.exists()
+        && let Some(dir) = path.parent()
+    {
+        let old = dir.with_file_name("rdAPP");
+        if old.join("hosts.toml").exists() && !dir.exists() {
+            let _ = std::fs::rename(&old, dir);
         }
     }
     if !path.exists() {

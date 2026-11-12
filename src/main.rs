@@ -11,6 +11,7 @@ mod keychain;
 mod launch;
 mod launcher;
 mod ui;
+mod update;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -34,6 +35,8 @@ pub enum UserEvent {
     Menu(MenuEvent),
     Reload,
     Ipc(String),
+    UpdateIpc(String),
+    Update(update::UpdateEvent),
     OpenEditor,
 }
 
@@ -61,6 +64,7 @@ fn build_menu(hosts: &[Host], error: Option<&str>) -> Menu {
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&MenuItem::with_id("launcher", "Conexiones", true, None));
     let _ = menu.append(&MenuItem::with_id("editor", "Ajustes…", true, None));
+    let _ = menu.append(&MenuItem::with_id("check_updates", "Buscar actualizaciones…", true, None));
 
     let forget = Submenu::new("Olvidar contraseña", !hosts.is_empty());
     for (i, h) in hosts.iter().enumerate() {
@@ -99,6 +103,7 @@ fn build_app_menu() -> Menu {
     let app = Submenu::new("rdOO", true);
     let _ = app.append_items(&[
         &about,
+        &MenuItem::with_id("check_updates", "Buscar actualizaciones…", true, None),
         &PredefinedMenuItem::separator(),
         &MenuItem::with_id(
             "editor",
@@ -147,6 +152,7 @@ struct State {
     app_menu: Option<Menu>,
     editor: Option<Editor>,
     launcher: Option<Launcher>,
+    update: update::Update,
 }
 
 impl State {
@@ -202,13 +208,13 @@ fn main() {
     let last = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(10)));
     let watch_name = cfg_path.file_name().map(|s| s.to_owned());
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if let Ok(ev) = res {
-            if ev.paths.iter().any(|p| p.file_name().map(|s| s.to_owned()) == watch_name) {
-                let mut l = last.lock().unwrap();
-                if l.elapsed() > Duration::from_millis(500) {
-                    *l = Instant::now();
-                    let _ = proxy_w.lock().unwrap().send_event(UserEvent::Reload);
-                }
+        if let Ok(ev) = res
+            && ev.paths.iter().any(|p| p.file_name().map(|s| s.to_owned()) == watch_name)
+        {
+            let mut l = last.lock().unwrap();
+            if l.elapsed() > Duration::from_millis(500) {
+                *l = Instant::now();
+                let _ = proxy_w.lock().unwrap().send_event(UserEvent::Reload);
             }
         }
     })
@@ -218,10 +224,16 @@ fn main() {
     }
 
     let ipc_proxy = event_loop.create_proxy();
-    let mut st = State { file: config::File::default(), hosts: Vec::new(), tray: None, dock_menu: None, app_menu: None, editor: None, launcher: None };
+    let update = update::Update::new(ipc_proxy.clone());
+    let mut st = State { file: config::File::default(), hosts: Vec::new(), tray: None, dock_menu: None, app_menu: None, editor: None, launcher: None, update };
 
     event_loop.run(move |event, target, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        if st.update.is_downloading() {
+            st.update.poll();
+            *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(150));
+        } else {
+            *control_flow = ControlFlow::Wait;
+        }
         let _keep = &watcher;
 
         let open_editor = |st: &mut State| match &st.editor {
@@ -254,6 +266,9 @@ fn main() {
                 } else {
                     open_launcher(&mut st);
                 }
+                if st.update.auto_check() {
+                    st.update.check(target);
+                }
             }
             // Clic en el icono del Dock / volver a abrir la app.
             Event::Reopen { .. } => open_launcher(&mut st),
@@ -263,6 +278,9 @@ fn main() {
                 }
                 if st.launcher.as_ref().is_some_and(|l| l.id() == window_id) {
                     st.launcher = None;
+                }
+                if st.update.window_id() == Some(window_id) {
+                    st.update.window_closed();
                 }
             }
             Event::UserEvent(UserEvent::Reload) => st.reload(&cfg_path),
@@ -278,6 +296,7 @@ fn main() {
                         }
                     }
                     Some("settings") => open_editor(&mut st),
+                    Some("check_updates") => st.update.check(target),
                     Some("save") => {
                         let res = serde_json::from_value::<Vec<Host>>(v["hosts"].clone())
                             .map_err(|e| e.to_string())
@@ -310,12 +329,14 @@ fn main() {
                         }
                     }
                     Some("set_password") => {
-                        if let (Some(acc), Some(pw)) = (v["account"].as_str(), v["password"].as_str()) {
-                            if !acc.is_empty() && !pw.is_empty() {
-                                keychain::set(acc, pw);
-                                if let Some(e) = &st.editor {
-                                    e.password_saved(acc);
-                                }
+                        if let (Some(acc), Some(pw)) =
+                            (v["account"].as_str(), v["password"].as_str())
+                            && !acc.is_empty()
+                            && !pw.is_empty()
+                        {
+                            keychain::set(acc, pw);
+                            if let Some(e) = &st.editor {
+                                e.password_saved(acc);
                             }
                         }
                     }
@@ -329,6 +350,14 @@ fn main() {
                     }
                     Some("close") => st.editor = None,
                     _ => {}
+                }
+            }
+            Event::UserEvent(UserEvent::UpdateIpc(msg)) => {
+                st.update.handle_ipc(&msg, target);
+            }
+            Event::UserEvent(UserEvent::Update(ev)) => {
+                if st.update.handle_event(ev, target) {
+                    *control_flow = ControlFlow::Exit;
                 }
             }
             Event::UserEvent(UserEvent::Menu(e)) => {
@@ -346,6 +375,7 @@ fn main() {
                     match id {
                         "editor" => open_editor(&mut st),
                         "launcher" => open_launcher(&mut st),
+                        "check_updates" => st.update.check(target),
                         "edit" => ui::open_text(&cfg_path),
                         "logs" => ui::open_path(&launch::log_dir()),
                         "quit" => *control_flow = ControlFlow::Exit,

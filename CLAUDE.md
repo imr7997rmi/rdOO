@@ -9,6 +9,7 @@ Cliente RDP ligero para macOS. La app (`src/`) es un lanzador/gestor; la conexi�
 - Tras tocar `vendor/IronRDP`, regenerar el parche: `git -C vendor/IronRDP diff > patches/ironrdp-rdoo.patch`.
 - Requiere cmake (para libopus). El bundle se firma fuera de Documents (iCloud añade xattrs que rompen codesign).
 - Versión: `Cargo.toml` → se muestra en menú, editor, «Acerca de» e Info.plist. Etiquetar `vX.Y.Z` al publicar.
+- Compilación (`CFBundleVersion`): fecha y hora `YYYYMMDD.HHMM`, generada por `bundle.sh`. El feed de actualizaciones compara ese campo.
 
 ## Arquitectura
 - `main.rs`: bucle tao, icono de barra de menú (tray-icon/muda), menú de app, menú del Dock, watcher de hosts.toml.
@@ -18,6 +19,11 @@ Cliente RDP ligero para macOS. La app (`src/`) es un lanzador/gestor; la conexi�
 - `keychain.rs`: Llavero, servicio `rdOO`; cuenta `user@address` o `login:<nombre>`.
 - `launch.rs`: lanza el visor (contraseña por `RDP_PASSWORD`), log en `~/Library/Logs/rdOO/`, traduce errores.
 - `dock.rs`: añade `applicationDockMenu:` al delegado de NSApplication.
+- `update.rs` + `update.html`: feed `rdOO-latest.json`, descarga con curl, SHA-256 con shasum,
+  extracción con ditto y script de sustitución tras cerrar la app. Se abre desde el menú
+  rdOO → «Buscar actualizaciones…» y desde Ajustes → General. `RDOO_UPDATE_URL` cambia el feed.
+- `scripts/publish-update.sh` publica `dist/rdOO-latest.zip/json` por SFTP; el workflow
+  `.github/workflows/release.yml` compila universal, publica en `/apps` y en `nivvoo-apps`.
 
 ## Parche sobre IronRDP
 - Redimensionado con EGFX: se da por completado al llegar ResetGraphics con el nuevo tamaño (antes: timeout + reconexión).

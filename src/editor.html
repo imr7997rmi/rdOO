@@ -79,9 +79,9 @@ footer .ver { color: var(--muted); font-size: 11px; }
 </head>
 <body>
 <aside>
-  <div class="seg"><button id="tab-h" class="on">Conexiones</button><button id="tab-l">Usuarios</button></div>
+  <div class="seg"><button id="tab-h" class="on">Conexiones</button><button id="tab-l">Usuarios</button><button id="tab-g">General</button></div>
   <div id="list"></div>
-  <div class="tools">
+  <div class="tools" id="tools">
     <button id="add" title="Añadir">＋</button>
     <button id="del" title="Eliminar">－</button>
     <button id="dup" title="Duplicar">⧉</button>
@@ -98,11 +98,11 @@ footer .ver { color: var(--muted); font-size: 11px; }
   <button id="save" class="primary">Guardar</button>
 </footer>
 <script>
-const init = window.RDOO_INIT || { hosts: [], logins: [], version: "?" };
+const init = window.RDOO_INIT || { hosts: [], logins: [], version: "?", build: "" };
 const copy = (x) => JSON.parse(JSON.stringify(x));
 let hosts = copy(init.hosts || []);
 let logins = copy(init.logins || []);
-let mode = "h";                       // "h" conexiones, "l" usuarios
+let mode = "h";                       // "h" conexiones, "l" usuarios, "g" general
 let selH = hosts.length ? 0 : -1, selL = logins.length ? 0 : -1;
 let dirty = false;
 const pw = new Set(Object.keys(init.pw || {}));
@@ -132,7 +132,7 @@ const setSel = (i) => { if (mode === "h") selH = i; else selL = i; };
 const loginOf = (name) => logins.find((l) => l.name === name);
 const usedBy = (name) => hosts.filter((h) => h.login === name);
 
-$("ver").textContent = "rdOO " + init.version;
+$("ver").textContent = "rdOO " + init.version + (init.build ? " (" + init.build + ")" : "");
 
 function setDirty(v) {
   dirty = v; $("save").disabled = !v; $("revert").disabled = !v;
@@ -150,6 +150,13 @@ function subtitle(h) {
 function renderList() {
   $("tab-h").classList.toggle("on", mode === "h");
   $("tab-l").classList.toggle("on", mode === "l");
+  $("tab-g").classList.toggle("on", mode === "g");
+  if (mode === "g") {
+    $("list").innerHTML = "";
+    $("tools").style.display = "none";
+    return;
+  }
+  $("tools").style.display = "flex";
   const sel = getSel(), list = items();
   $("list").innerHTML = list.map((h, i) =>
     `<div class="item ${i === sel ? "sel" : ""}" data-i="${i}">
@@ -268,7 +275,23 @@ function renderLogin() {
   $("forget").onclick = () => { send({ cmd: "forget_login", name: l.name }); pw.delete("login:" + l.name); renderLogin(); };
 }
 
-function render() { renderList(); if (mode === "h") renderHost(); else renderLogin(); }
+function renderGeneral() {
+  const f = $("form");
+  const build = init.build ? ` <span class="hint">(compilación ${esc(init.build)})</span>` : "";
+  f.innerHTML = `
+    <h2>General</h2>
+    <h3>Actualizaciones</h3>
+    <div class="row"><label>Versión</label><div>rdOO ${esc(init.version)}${build}</div></div>
+    <div class="row"><label></label><div class="hint">Se comprueba el servidor de Nivvoo y se instala la última compilación disponible.</div></div>
+    <div class="actions"><button id="check-updates" class="primary">Comprobar actualizaciones</button></div>
+    <div class="hint" id="update-status" style="padding-left:130px;margin-top:10px"></div>`;
+  $("check-updates").onclick = () => {
+    $("update-status").textContent = "Comprobando actualizaciones…";
+    send({ cmd: "check_updates" });
+  };
+}
+
+function render() { renderList(); if (mode === "g") renderGeneral(); else if (mode === "h") renderHost(); else renderLogin(); }
 
 function cleanH(h) {
   const o = { name: h.name.trim(), address: h.address.trim() };
@@ -306,6 +329,7 @@ function validate() {
 
 $("tab-h").onclick = () => { mode = "h"; render(); };
 $("tab-l").onclick = () => { mode = "l"; render(); };
+$("tab-g").onclick = () => { mode = "g"; render(); };
 $("add").onclick = () => {
   if (mode === "h") hosts.push({ name: "Nueva conexión", address: "", user: "" });
   else logins.push({ name: "Nuevo usuario", user: "" });
