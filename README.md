@@ -7,7 +7,7 @@ Cliente RDP ultraligero para macOS, en Rust.
 - Al abrir la app (o pulsar su icono del Dock) aparece la ventana de conexiones: buscar, elegir y conectar (↩ o doble clic).
 - Clic derecho en el icono del Dock o icono en la barra de menú: misma lista.
 - **Usuarios reutilizables**: un mismo usuario/contraseña para varias conexiones (pestaña «Usuarios» del editor).
-- **Editor visual** de conexiones (menú «Ajustes…» (⌘,)): añadir, duplicar, ordenar y configurar sin tocar el archivo.
+- **Editor visual** de conexiones (menú «Ajustes…» (⌘,)): añadir, duplicar, ordenar y configurar sin tocar el archivo. Doble clic en una conexión para conectar; lo que añadas se guarda solo.
 - La versión se ve en la barra de menú, en «Acerca de rdOO» y en el editor.
 - **Actualizaciones**: menú rdOO → «Buscar actualizaciones…» o Ajustes → General. Descarga el ZIP publicado, verifica su SHA-256 y se reinstala sola al cerrar.
 - Icono de la app: `assets/icon.png` (el `.icns` se genera en `scripts/bundle.sh`).

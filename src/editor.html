@@ -89,6 +89,7 @@ footer .ver { color: var(--muted); font-size: 11px; }
     <button id="up" title="Subir">↑</button>
     <button id="down" title="Bajar">↓</button>
   </div>
+  <div class="hint" id="tip" style="padding:0 12px 8px"></div>
 </aside>
 <main id="form"></main>
 <footer>
@@ -105,6 +106,7 @@ let logins = copy(init.logins || []);
 let mode = "h";                       // "h" conexiones, "l" usuarios, "g" general
 let selH = hosts.length ? 0 : -1, selL = logins.length ? 0 : -1;
 let dirty = false;
+let rev = 0, inflightRev = 0, inflightData = null, saveTimer = null, pendingAdd = false;
 const pw = new Set(Object.keys(init.pw || {}));
 const account = (h) => (h.login ? "login:" + h.login : (h.user || "") + "@" + (h.address || ""));
 function pwRow(acc) {
@@ -135,16 +137,42 @@ const usedBy = (name) => hosts.filter((h) => h.login === name);
 $("ver").textContent = "rdOO " + init.version + (init.build ? " (" + init.build + ")" : "");
 
 function setDirty(v) {
+  if (v) rev++;
   dirty = v; $("save").disabled = !v; $("revert").disabled = !v;
-  $("status").textContent = v ? "Cambios sin guardar" : "";
+  if (v) $("status").textContent = "Cambios sin guardar";
+  else if ($("status").textContent === "Cambios sin guardar") $("status").textContent = "";
 }
 function status(t) { $("status").textContent = t; }
+
+function scheduleSave() {
+  clearTimeout(saveTimer); saveTimer = null;
+  if (!pendingAdd || !dirty || inflightData) return;
+  saveTimer = setTimeout(() => { saveTimer = null; saveNow(true); }, 500);
+}
+
+function saveNow(auto) {
+  clearTimeout(saveTimer); saveTimer = null;
+  if (!dirty) return true;
+  if (!validate(auto)) return false;
+  inflightRev = rev;
+  inflightData = { hosts: hosts.map(cleanH), logins: logins.map(cleanL) };
+  status("Guardando…");
+  send({ cmd: "save", hosts: inflightData.hosts, logins: inflightData.logins });
+  return true;
+}
 
 function subtitle(h) {
   if (mode === "l") return (h.domain ? h.domain + "\\" : "") + h.user;
   const l = h.login ? loginOf(h.login) : null;
   const u = l ? l.user : h.user;
   return (u ? u + "@" : "") + (h.address || "");
+}
+
+function updateTools() {
+  const sel = getSel(), list = items();
+  $("del").disabled = $("dup").disabled = sel < 0;
+  $("up").disabled = sel <= 0;
+  $("down").disabled = sel < 0 || sel >= list.length - 1;
 }
 
 function renderList() {
@@ -154,20 +182,40 @@ function renderList() {
   if (mode === "g") {
     $("list").innerHTML = "";
     $("tools").style.display = "none";
+    $("tip").textContent = "";
     return;
   }
   $("tools").style.display = "flex";
+  $("tip").textContent = mode === "h" ? "Doble clic en una conexión para conectar" : "";
   const sel = getSel(), list = items();
   $("list").innerHTML = list.map((h, i) =>
-    `<div class="item ${i === sel ? "sel" : ""}" data-i="${i}">
+    `<div class="item ${i === sel ? "sel" : ""}" data-i="${i}"${mode === "h" ? ' title="Doble clic para conectar"' : ""}>
        <div class="n">${esc(h.name) || "<sin nombre>"}</div>
        <div class="a">${esc(subtitle(h))}</div>
      </div>`).join("");
-  document.querySelectorAll(".item").forEach((el) =>
-    el.addEventListener("click", () => { setSel(+el.dataset.i); render(); }));
-  $("del").disabled = $("dup").disabled = sel < 0;
-  $("up").disabled = sel <= 0;
-  $("down").disabled = sel < 0 || sel >= list.length - 1;
+  document.querySelectorAll("#list .item").forEach((el) => {
+    const i = +el.dataset.i;
+    el.onclick = () => selectRow(i);
+    el.ondblclick = () => { if (mode === "h") connectHost(i); };
+  });
+  updateTools();
+}
+
+function selectRow(i) {
+  if (i === getSel()) return;
+  setSel(i);
+  document.querySelectorAll("#list .item").forEach((el) =>
+    el.classList.toggle("sel", +el.dataset.i === getSel()));
+  updateTools();
+  if (mode === "h") renderHost(); else renderLogin();
+}
+
+function connectHost(i) {
+  if (!hosts[i]) return;
+  selectRow(i);
+  if (!validate()) return;
+  saveNow(false);
+  send({ cmd: "connect", host: cleanH(hosts[i]), logins: logins.map(cleanL) });
 }
 
 const scales = [["", "Automático"], [100, "100 %"], [125, "125 %"], [150, "150 %"], [175, "175 %"], [200, "200 %"], [250, "250 %"], [300, "300 %"]];
@@ -186,8 +234,10 @@ function bind(f, obj, after) {
       const prev = obj[k];
       obj[k] = v;
       setDirty(true);
+      scheduleSave();
       if (after) after(k, v, prev);
     });
+    if (ev === "input") el.addEventListener("change", () => { if (pendingAdd) saveNow(true); });
   });
 }
 
@@ -243,7 +293,7 @@ function renderHost() {
   });
   if (!h.login) bindPw(() => account(h));
   $("remove").onclick = () => $("del").click();
-  $("connect").onclick = () => { if (validate()) send({ cmd: "connect", host: cleanH(h), logins: logins.map(cleanL) }); };
+  $("connect").onclick = () => connectHost(selH);
   $("forget").onclick = () => { send({ cmd: "forget", host: cleanH(h) }); pw.delete(account(h)); renderHost(); };
 }
 
@@ -309,20 +359,21 @@ function cleanL(l) {
 }
 
 function fail(m, i, msg) { mode = m; setSel(i); render(); status(msg); return false; }
-function validate() {
+function validate(quiet) {
+  const bad = (m, i, msg) => quiet ? false : fail(m, i, msg);
   const names = new Set();
   for (let i = 0; i < logins.length; i++) {
     const l = logins[i];
-    if (!l.name?.trim()) return fail("l", i, "Falta el nombre de este usuario.");
-    if (names.has(l.name.trim())) return fail("l", i, "Ya hay otro usuario con este nombre.");
+    if (!l.name?.trim()) return bad("l", i, "Falta el nombre de este usuario.");
+    if (names.has(l.name.trim())) return bad("l", i, "Ya hay otro usuario con este nombre.");
     names.add(l.name.trim());
-    if (!l.user?.trim()) return fail("l", i, "Falta el usuario.");
+    if (!l.user?.trim()) return bad("l", i, "Falta el usuario.");
   }
   for (let i = 0; i < hosts.length; i++) {
     const h = hosts[i];
-    if (!h.name?.trim()) return fail("h", i, "Falta el nombre en esta conexión.");
-    if (!h.address?.trim()) return fail("h", i, "Falta la dirección en esta conexión.");
-    if (h.login ? !loginOf(h.login) : !h.user?.trim()) return fail("h", i, "Falta el usuario en esta conexión.");
+    if (!h.name?.trim()) return bad("h", i, "Falta el nombre en esta conexión.");
+    if (!h.address?.trim()) return bad("h", i, "Falta la dirección en esta conexión.");
+    if (h.login ? !loginOf(h.login) : !h.user?.trim()) return bad("h", i, "Falta el usuario en esta conexión.");
   }
   return true;
 }
@@ -333,39 +384,44 @@ $("tab-g").onclick = () => { mode = "g"; render(); };
 $("add").onclick = () => {
   if (mode === "h") hosts.push({ name: "Nueva conexión", address: "", user: "" });
   else logins.push({ name: "Nuevo usuario", user: "" });
-  setSel(items().length - 1); setDirty(true); render();
+  setSel(items().length - 1); pendingAdd = true; setDirty(true); scheduleSave(); render();
   document.querySelector('[data-k="name"]').select();
 };
 $("dup").onclick = () => {
   const list = items(), i = getSel();
   const c = copy(list[i]); c.name += " (copia)";
-  list.splice(i + 1, 0, c); setSel(i + 1); setDirty(true); render();
+  list.splice(i + 1, 0, c); setSel(i + 1); pendingAdd = true; setDirty(true); scheduleSave(); render();
 };
 $("del").onclick = () => {
   const list = items(), i = getSel();
   if (mode === "l" && usedBy(list[i].name).length) { status("Este usuario está en uso: cámbialo antes en sus conexiones."); return; }
+  clearTimeout(saveTimer); saveTimer = null; pendingAdd = false;
   const gone = list[i].name;
   list.splice(i, 1); setSel(Math.min(i, list.length - 1)); setDirty(true); render();
   status(`«${gone}» eliminado — Guardar para confirmar o Descartar para deshacer`);
 };
 $("up").onclick = () => { const l = items(), i = getSel(); [l[i - 1], l[i]] = [l[i], l[i - 1]]; setSel(i - 1); setDirty(true); render(); };
 $("down").onclick = () => { const l = items(), i = getSel(); [l[i + 1], l[i]] = [l[i], l[i + 1]]; setSel(i + 1); setDirty(true); render(); };
-$("save").onclick = () => {
-  if (validate()) { status("Guardando…"); send({ cmd: "save", hosts: hosts.map(cleanH), logins: logins.map(cleanL) }); }
-};
+$("save").onclick = () => saveNow(false);
 $("revert").onclick = () => {
+  clearTimeout(saveTimer); saveTimer = null; pendingAdd = false; inflightData = null;
   hosts = copy(init.hosts || []); logins = copy(init.logins || []);
   selH = Math.min(Math.max(selH, 0), hosts.length - 1); selL = Math.min(Math.max(selL, 0), logins.length - 1);
   setDirty(false); render();
 };
 document.addEventListener("keydown", (e) => {
-  if (e.metaKey && e.key === "s") { e.preventDefault(); if (dirty) $("save").click(); }
-  if (e.metaKey && e.key === "w") { e.preventDefault(); send({ cmd: "close" }); }
+  if (e.metaKey && e.key === "s") { e.preventDefault(); if (dirty) saveNow(false); }
+  if (e.metaKey && e.key === "w") { e.preventDefault(); if (dirty) saveNow(true); send({ cmd: "close" }); }
 });
 
 document.addEventListener("contextmenu", (e) => { if (!e.target.closest("input, select")) e.preventDefault(); });
 window.rdooSaved = (ok, msg) => {
-  if (ok) { init.hosts = hosts.map(cleanH); init.logins = logins.map(cleanL); setDirty(false); status("Guardado ✓"); }
+  const data = inflightData; inflightData = null;
+  if (ok) {
+    if (data) { init.hosts = data.hosts; init.logins = data.logins; }
+    if (rev === inflightRev) { setDirty(false); pendingAdd = false; status("Guardado ✓"); }
+    else { status("Cambios sin guardar"); scheduleSave(); }
+  }
   else status("Error al guardar: " + msg);
 };
 window.rdooNotice = (msg) => status(msg);

@@ -66,21 +66,31 @@ function render() {
         <span class="n">${esc(h.name)}</span><span class="a">${esc(h.user)}@${esc(h.address)}</span></div>`).join("")
     : `<div class="empty">${hosts.length ? "Sin resultados" : "No hay conexiones.<br>Añádelas en Ajustes (⌘,)."}</div>`;
   document.querySelectorAll(".item").forEach((el) => {
-    el.onclick = () => { sel = +el.dataset.k; render(); };
-    el.ondblclick = () => { sel = +el.dataset.k; connect(); };
+    el.onclick = () => select(+el.dataset.k);
+    el.ondblclick = () => { select(+el.dataset.k); connect(+el.dataset.k); };
   });
   $("go").disabled = !shown.length;
   const cur = document.querySelector(".item.sel");
   if (cur) cur.scrollIntoView({ block: "nearest" });
 }
-function connect() { if (shown[sel]) send({ cmd: "launch", index: shown[sel].i }); }
+function select(k) {
+  sel = Math.max(0, Math.min(k, shown.length - 1));
+  document.querySelectorAll(".item").forEach((el) => {
+    el.classList.toggle("sel", +el.dataset.k === sel);
+  });
+  document.querySelector(".item.sel")?.scrollIntoView({ block: "nearest" });
+}
+function connect(k = sel) {
+  const h = shown[k];
+  if (h) send({ cmd: "launch", index: h.i });
+}
 
 $("q").addEventListener("input", () => { sel = 0; render(); });
-$("go").onclick = connect;
+$("go").onclick = () => connect();
 $("settings").onclick = () => send({ cmd: "settings" });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); render(); }
-  else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); render(); }
+  if (e.key === "ArrowDown") { e.preventDefault(); select(sel + 1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); select(sel - 1); }
   else if (e.key === "Enter") { e.preventDefault(); connect(); }
   else if (e.key === "Escape") { $("q").value = ""; render(); }
 });

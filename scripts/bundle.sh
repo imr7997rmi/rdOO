@@ -11,6 +11,13 @@ for d in "$HOME"/Library/Python/*/bin; do [ -x "$d/cmake" ] && PATH="$d:$PATH"; 
 export PATH
 command -v cmake >/dev/null || { echo "Falta cmake: python3 -m pip install --user cmake"; exit 1; }
 
+# Perfil agresivo también para ironrdp-viewer (sin esto se compilaba sin LTO).
+# Más rápido y ~45 % más pequeño; panic=abort es seguro en binarios de usuario final.
+export CARGO_PROFILE_RELEASE_LTO=fat
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+export CARGO_PROFILE_RELEASE_PANIC=abort
+export CARGO_PROFILE_RELEASE_STRIP=symbols
+
 # Versión de IronRDP sobre la que están hechos los parches.
 IRONRDP_REV=b69cda22ec692e212caffdbb9fe0c4e5ff1d2696
 if [ ! -d vendor/IronRDP ]; then
@@ -52,7 +59,7 @@ APP="$(mktemp -d)/rdOO.app"
 mkdir -p "$APP/Contents/MacOS"
 cp "$RDOO_BIN" "$APP/Contents/MacOS/rdoo"
 cp "$VIEWER_BIN" "$APP/Contents/MacOS/ironrdp-viewer"
-strip -x "$APP/Contents/MacOS/ironrdp-viewer"
+strip -u -r "$APP/Contents/MacOS/ironrdp-viewer"
 
 # Icono (.icns) desde assets/icon.png
 mkdir -p "$APP/Contents/Resources"
