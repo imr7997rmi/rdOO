@@ -161,11 +161,12 @@ function saveNow(auto) {
   return true;
 }
 
-function subtitle(h) {
-  if (mode === "l") return (h.domain ? h.domain + "\\" : "") + h.user;
+function credential(h) {
+  if (mode === "l") return (h.domain ? h.domain + "\\" : "") + (h.user || "");
   const l = h.login ? loginOf(h.login) : null;
   const u = l ? l.user : h.user;
-  return (u ? u + "@" : "") + (h.address || "");
+  const d = l ? l.domain : h.domain;
+  return u ? (d ? d + "\\" : "") + u : "";
 }
 
 function updateTools() {
@@ -188,11 +189,12 @@ function renderList() {
   $("tools").style.display = "flex";
   $("tip").textContent = mode === "h" ? "Doble clic en una conexión para conectar" : "";
   const sel = getSel(), list = items();
-  $("list").innerHTML = list.map((h, i) =>
-    `<div class="item ${i === sel ? "sel" : ""}" data-i="${i}"${mode === "h" ? ' title="Doble clic para conectar"' : ""}>
-       <div class="n">${esc(h.name) || "<sin nombre>"}</div>
-       <div class="a">${esc(subtitle(h))}</div>
-     </div>`).join("");
+  $("list").innerHTML = list.map((h, i) => {
+    const cred = credential(h);
+    return `<div class="item ${i === sel ? "sel" : ""}" data-i="${i}"${mode === "h" ? ' title="Doble clic para conectar"' : ""}>
+       <div class="n">${esc(h.name) || "<sin nombre>"}${cred ? ` (${esc(cred)})` : ""}</div>
+     </div>`;
+  }).join("");
   document.querySelectorAll("#list .item").forEach((el) => {
     const i = +el.dataset.i;
     el.onclick = () => selectRow(i);

@@ -78,11 +78,24 @@ fn build_menu(hosts: &[Host], error: Option<&str>) -> Menu {
     menu
 }
 
+/// Etiqueta «nombre (dominio\usuario)» para los menús.
+fn host_label(h: &Host) -> String {
+    let cred = if h.user.is_empty() {
+        String::new()
+    } else {
+        match h.domain.as_deref().filter(|d| !d.is_empty()) {
+            Some(d) => format!("{d}\\{}", h.user),
+            None => h.user.clone(),
+        }
+    };
+    if cred.is_empty() { h.name.clone() } else { format!("{} ({cred})", h.name) }
+}
+
 /// Menú del Dock: conexiones + ajustes.
 fn build_dock_menu(hosts: &[Host]) -> Menu {
     let menu = Menu::new();
     for (i, h) in hosts.iter().enumerate() {
-        let _ = menu.append(&MenuItem::with_id(format!("connect:{i}"), &h.name, true, None));
+        let _ = menu.append(&MenuItem::with_id(format!("connect:{i}"), host_label(h), true, None));
     }
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&MenuItem::with_id("editor", "Ajustes…", true, None));
