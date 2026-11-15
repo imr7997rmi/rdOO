@@ -44,6 +44,9 @@ pub struct Host {
     /// Cmd envía la tecla Windows (por defecto Cmd actúa como Ctrl)
     #[serde(default, skip_serializing_if = "is_false")]
     pub cmd_is_windows: bool,
+    /// Pedir la sesión administrativa (consola) del servidor
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub admin: bool,
     /// Argumentos extra para ironrdp-viewer
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
@@ -168,6 +171,7 @@ user = "usuario"               # o bien: login = "Admin oficina"
 # no_h264 = true
 # no_clipboard = true          # sin portapapeles compartido
 # cmd_is_windows = true        # Cmd = tecla Windows (por defecto Cmd = Ctrl)
+# admin = true                 # abrir en la sesión de administrador (consola)
 # args = ["--audio-latency", "200"]
 "#;
 

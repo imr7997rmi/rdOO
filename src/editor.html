@@ -276,6 +276,7 @@ function renderHost() {
       <label><input type="checkbox" data-k="no_h264" ${h.no_h264 ? "checked" : ""}><span>Sin H.264<small>Modo gráfico antiguo</small></span></label>
       <label><input type="checkbox" data-k="no_clipboard" ${h.no_clipboard ? "checked" : ""}><span>Sin portapapeles<small>No compartir copiar/pegar</small></span></label>
       <label><input type="checkbox" data-k="cmd_is_windows" ${h.cmd_is_windows ? "checked" : ""}><span>Cmd = tecla Windows<small>Por defecto Cmd actúa como Ctrl</small></span></label>
+      <label><input type="checkbox" data-k="admin" ${h.admin ? "checked" : ""}><span>Sesión de consola<small>Abre la sesión de administrador</small></span></label>
     </div>
     <h3>Avanzado</h3>
     <div class="row"><label>Argumentos extra</label><div>
@@ -350,7 +351,7 @@ function cleanH(h) {
   if (h.login) o.login = h.login;
   else { o.user = (h.user || "").trim(); if (h.domain) o.domain = h.domain.trim(); }
   for (const k of ["width", "height", "scale"]) if (Number.isInteger(h[k])) o[k] = h[k];
-  for (const k of ["udp", "microphone", "local_cursor", "no_h264", "no_clipboard", "cmd_is_windows"]) if (h[k]) o[k] = true;
+  for (const k of ["udp", "microphone", "local_cursor", "no_h264", "no_clipboard", "cmd_is_windows", "admin"]) if (h[k]) o[k] = true;
   if (h.args && h.args.length) o.args = h.args;
   return o;
 }

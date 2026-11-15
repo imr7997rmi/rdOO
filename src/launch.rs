@@ -77,6 +77,13 @@ fn run(host: Host) {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    // La sesión administrativa solo se puede pedir con la propiedad .rdp homónima.
+    if host.admin {
+        let rdp = std::env::temp_dir().join("rdoo-administrative-session.rdp");
+        if std::fs::write(&rdp, "administrative session:i:1\r\n").is_ok() {
+            cmd.arg("--rdp-file").arg(&rdp);
+        }
+    }
     cmd.args(host.viewer_args());
     if !host.cmd_is_windows {
         cmd.env("RDOO_CMD_AS_CTRL", "1");
