@@ -6,6 +6,9 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export MACOSX_DEPLOYMENT_TARGET=11.0
+# Misma zona horaria en local y CI: CFBundleVersion debe crecer siempre para que
+# la app detecte las actualizaciones publicadas por el workflow.
+export TZ=Europe/Madrid
 # cmake es necesario para compilar libopus (audio). pip lo instala en segundos.
 for d in "$HOME"/Library/Python/*/bin; do [ -x "$d/cmake" ] && PATH="$d:$PATH"; done
 export PATH
