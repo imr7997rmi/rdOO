@@ -43,6 +43,7 @@ impl Editor {
         let init = serde_json::json!({
             "version": VERSION,
             "build": crate::update::current_build(),
+            "login": crate::inicio::disponible().then(crate::inicio::activo),
             "hosts": file.hosts,
             "logins": file.logins,
             "pw": pw
@@ -81,6 +82,12 @@ impl Editor {
         let _ = self
             .webview
             .evaluate_script(&format!("rdooPwSaved({})", serde_json::Value::String(account.to_string())));
+    }
+
+    /// Refleja en «General» el estado real de «Abrir al iniciar sesión».
+    pub fn login_state(&self) {
+        let on = crate::inicio::disponible().then(crate::inicio::activo);
+        let _ = self.webview.evaluate_script(&format!("rdooLogin({})", serde_json::json!(on)));
     }
 
     pub fn notice(&self, msg: &str) {

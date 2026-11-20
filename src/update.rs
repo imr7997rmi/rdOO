@@ -2,8 +2,9 @@
 //!
 //! Reutiliza el protocolo de fileOO: feed JSON pequeño, descarga con `curl`,
 //! validación SHA-256 con `shasum`, extracción con `ditto` y un script que
-//! sustituye la app cuando termina el proceso. La UI es una ventana wry/HTML
-//! para mantener el mismo lenguaje visual que «Ajustes».
+//! sustituye la app cuando termina el proceso. Los avisos (última versión, nueva
+//! versión, errores) y la ventanita de progreso son nativos, iguales que en fileOO
+//! (ver `actualizacion_nativa.rs`).
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -12,17 +13,39 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tao::dpi::LogicalSize;
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{Window, WindowBuilder, WindowId};
-use wry::{WebView, WebViewBuilder};
+use tao::window::WindowId;
 
 use crate::UserEvent;
 
 const DEFAULT_FEED: &str =
     "https://raw.githubusercontent.com/imr7997rmi/nivvoo-apps/main/rdOO-latest.json";
 const APP_NAME: &str = "rdOO";
-const HTML: &str = include_str!("update.html");
+use crate::actualizacion_nativa::{self as nativo, Progreso};
+
+fn native_alert(title: &str, text: &str, buttons: &[&str], critical: bool) -> bool {
+    match buttons {
+        [si, no] => nativo::confirmar(title, text, si, no),
+        [ok] => {
+            nativo::alerta(title, text, ok, critical);
+            true
+        }
+        _ => {
+            nativo::alerta(title, text, "OK", critical);
+            true
+        }
+    }
+}
+
+fn current_label() -> String {
+    let version = current_version();
+    let build = current_build();
+    if build.is_empty() {
+        format!("{APP_NAME} {version}")
+    } else {
+        format!("{APP_NAME} {version} (compilación {build})")
+    }
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Manifest {
@@ -64,8 +87,6 @@ enum State {
     Available(Manifest),
     Downloading { version: String },
     Installing,
-    UpToDate,
-    Error(String),
 }
 
 impl State {
@@ -94,59 +115,11 @@ pub(crate) struct Update {
     feed: String,
     proxy: EventLoopProxy<UserEvent>,
     state: State,
-    window: Option<UpdateWindow>,
+    window: Option<Progreso>,
     progress: Arc<Mutex<Progress>>,
     cancel: Arc<AtomicBool>,
     generation: u64,
     auto: bool,
-}
-
-struct UpdateWindow {
-    window: Window,
-    webview: WebView,
-}
-
-impl UpdateWindow {
-    fn open(
-        target: &EventLoopWindowTarget<UserEvent>,
-        proxy: EventLoopProxy<UserEvent>,
-        view: serde_json::Value,
-    ) -> Option<Self> {
-        let window = WindowBuilder::new()
-            .with_title("Actualización")
-            .with_inner_size(LogicalSize::new(480.0, 300.0))
-            .with_min_inner_size(LogicalSize::new(420.0, 240.0))
-            .with_resizable(false)
-            .build(target)
-            .ok()?;
-        let init = format!("window.RDOO_UPDATE_VIEW = {view};");
-        let webview = WebViewBuilder::new()
-            .with_html(HTML)
-            .with_initialization_script(init)
-            .with_ipc_handler(move |req| {
-                let _ = proxy.send_event(UserEvent::UpdateIpc(req.body().clone()));
-            })
-            .build(&window)
-            .ok()?;
-        window.set_focus();
-        Some(Self { window, webview })
-    }
-
-    fn id(&self) -> WindowId {
-        self.window.id()
-    }
-
-    fn focus(&self) {
-        self.window.set_visible(true);
-        self.window.set_minimized(false);
-        self.window.set_focus();
-    }
-
-    fn render(&self, view: &serde_json::Value) {
-        let _ = self
-            .webview
-            .evaluate_script(&format!("rdooUpdate({view});"));
-    }
 }
 
 impl Update {
@@ -176,7 +149,7 @@ impl Update {
     }
 
     pub(crate) fn window_id(&self) -> Option<WindowId> {
-        self.window.as_ref().map(UpdateWindow::id)
+        None
     }
 
     pub(crate) fn check(&mut self, target: &EventLoopWindowTarget<UserEvent>) {
@@ -188,7 +161,7 @@ impl Update {
         let generation = self.generation;
         self.cancel.store(false, Ordering::SeqCst);
         self.state = State::Checking;
-        self.show(target);
+        let _ = target;
 
         let proxy = self.proxy.clone();
         let url = self.feed.clone();
@@ -213,24 +186,32 @@ impl Update {
                         let version = current_version();
                         let build = current_build();
                         if is_newer(&manifest, &version, &build) {
-                            let download = self.auto.then(|| manifest.clone());
-                            self.state = State::Available(manifest);
-                            if let Some(manifest) = download {
+                            let mut info = format!("{APP_NAME} {} (compilación {})", manifest.version, manifest.build);
+                            if manifest.size > 0 {
+                                info.push_str(&format!(" · {}", fmt_bytes(manifest.size)));
+                            }
+                            info.push_str(&format!("\nTienes {}.", current_label()));
+                            if !manifest.notes.trim().is_empty() {
+                                info.push_str("\n\n");
+                                info.push_str(manifest.notes.trim());
+                            }
+                            let go = self.auto
+                                || native_alert("Nueva versión disponible", &info, &["Actualizar", "Cancelar"], false);
+                            if go {
+                                self.state = State::Available(manifest.clone());
+                                self.show(target);
                                 self.start_download(manifest);
                             } else {
-                                self.show(target);
-                                self.render();
+                                self.dismiss();
                             }
                         } else {
-                            self.state = State::UpToDate;
-                            self.show(target);
-                            self.render();
+                            self.dismiss();
+                            native_alert("Estás en la última versión", &current_label(), &["OK"], false);
                         }
                     }
                     Err(error) => {
-                        self.state = State::Error(error);
-                        self.show(target);
-                        self.render();
+                        self.dismiss();
+                        native_alert("No se pudo comprobar la actualización", &error, &["OK"], true);
                     }
                 }
                 false
@@ -241,38 +222,24 @@ impl Update {
                 true
             }
             UpdateEvent::Error { generation, message } if generation == self.generation => {
-                self.state = State::Error(message);
-                self.show(target);
-                self.render();
+                let _ = target;
+                self.dismiss();
+                native_alert("No se pudo actualizar", &message, &["OK"], true);
                 false
             }
             _ => false,
         }
     }
 
-    pub(crate) fn handle_ipc(
-        &mut self,
-        message: &str,
-        target: &EventLoopWindowTarget<UserEvent>,
-    ) {
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(message) else {
-            return;
-        };
-        match value["cmd"].as_str() {
-            Some("download") => {
-                if let State::Available(manifest) = self.state.clone() {
-                    self.start_download(manifest);
-                }
-            }
-            Some("cancel") => self.dismiss(),
-            Some("close") => self.dismiss(),
-            Some("check") => self.check(target),
-            _ => {}
-        }
-    }
+    pub(crate) fn handle_ipc(&mut self, _message: &str, _target: &EventLoopWindowTarget<UserEvent>) {}
 
     pub(crate) fn poll(&mut self) {
-        if self.is_downloading() {
+        if self.window.as_ref().is_some_and(Progreso::cancelado) {
+            // «Cancelar» en la ventanita de progreso.
+            self.dismiss();
+            return;
+        }
+        if self.is_downloading() || matches!(self.state, State::Installing) {
             self.render();
         }
     }
@@ -323,110 +290,48 @@ impl Update {
         self.window = None;
     }
 
-    fn focus(&self) {
-        if let Some(window) = &self.window {
-            window.focus();
-        }
-    }
+    fn focus(&self) {}
 
-    fn show(&mut self, target: &EventLoopWindowTarget<UserEvent>) {
+    fn show(&mut self, _target: &EventLoopWindowTarget<UserEvent>) {
         if self.window.is_none() {
-            let view = self.view();
-            self.window = UpdateWindow::open(target, self.proxy.clone(), view);
+            let version = match &self.state {
+                State::Available(m) => m.version.clone(),
+                State::Downloading { version } => version.clone(),
+                _ => current_version(),
+            };
+            self.window = Progreso::abrir("Actualización", &format!("Descargando {APP_NAME} {version}…"), "Cancelar");
         }
-        if let Some(window) = &self.window {
-            window.focus();
-            window.render(&self.view());
-        }
+        self.render();
     }
 
     fn render(&self) {
-        if let Some(window) = &self.window {
-            window.render(&self.view());
-        }
-    }
-
-    fn view(&self) -> serde_json::Value {
-        let version = current_version();
-        let build = current_build();
-        let current = if build.is_empty() {
-            format!("{APP_NAME} {version}")
-        } else {
-            format!("{APP_NAME} {version} (compilación {build})")
-        };
-        let mut view = serde_json::json!({
-            "mode": "checking",
-            "title": "Actualización",
-            "message": "Comprobando actualizaciones…",
-            "notes": "",
-            "detail": "",
-            "progress": 0.0,
-            "current": current,
-        });
-
+        let Some(w) = &self.window else { return };
         match &self.state {
-            State::Idle => {}
-            State::Checking => {}
-            State::Available(manifest) => {
-                let mut message = format!("{APP_NAME} {} ({})", manifest.version, manifest.build);
-                if manifest.size > 0 {
-                    message.push_str(&format!(" · {}", fmt_bytes(manifest.size)));
-                }
-                view["mode"] = "available".into();
-                view["title"] = "Nueva versión disponible".into();
-                view["message"] = message.into();
-                view["notes"] = manifest.notes.trim().into();
-            }
             State::Downloading { version } => {
-                let progress = self
+                let (done, total, phase) = self
                     .progress
                     .lock()
                     .map(|p| (p.done, p.total, p.phase))
                     .unwrap_or((0, 0, "downloading"));
-                let (done, total, phase) = progress;
-                let fraction = if total > 0 {
-                    (done as f64 / total as f64).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let detail = match phase {
-                    "verifying" => "Verificando la descarga…".to_string(),
-                    "extracting" => "Descomprimiendo la actualización…".to_string(),
-                    "installing" => "Preparando la instalación…".to_string(),
-                    _ if total > 0 => format!(
-                        "{} de {} · {}%",
-                        fmt_bytes(done),
-                        fmt_bytes(total),
-                        (fraction * 100.0).round() as u64
+                w.titulo(&format!("Descargando {APP_NAME} {version}…"));
+                let fraction = if total > 0 { (done as f64 / total as f64).clamp(0.0, 1.0) } else { 0.0 };
+                match phase {
+                    "verifying" => w.actualizar(None, "Verificando la descarga…"),
+                    "extracting" => w.actualizar(None, "Descomprimiendo la actualización…"),
+                    "installing" => w.actualizar(None, "Preparando la instalación…"),
+                    _ if total > 0 => w.actualizar(
+                        Some(fraction * 100.0),
+                        &format!("{} de {} · {}%", fmt_bytes(done), fmt_bytes(total), (fraction * 100.0).round() as u64),
                     ),
-                    _ => fmt_bytes(done),
-                };
-                view["mode"] = "downloading".into();
-                view["title"] = "Actualización".into();
-                view["message"] = format!("Descargando {APP_NAME} {version}…").into();
-                view["detail"] = detail.into();
-                view["progress"] = if phase == "downloading" { fraction } else { 1.0 }.into();
+                    _ => w.actualizar(None, &fmt_bytes(done)),
+                }
             }
             State::Installing => {
-                view["mode"] = "installing".into();
-                view["title"] = "Actualización".into();
-                view["message"] = "Instalando la actualización…".into();
-                view["detail"] = "La aplicación se reiniciará automáticamente.".into();
-                view["progress"] = 1.0.into();
+                w.titulo("Instalando la actualización…");
+                w.actualizar(None, "La aplicación se reiniciará automáticamente.");
             }
-            State::UpToDate => {
-                let current = view["current"].clone();
-                view["mode"] = "info".into();
-                view["title"] = "Estás en la última versión".into();
-                view["message"] = current;
-            }
-            State::Error(message) => {
-                view["mode"] = "error".into();
-                view["title"] = "No se pudo actualizar".into();
-                view["message"] = message.clone().into();
-            }
+            _ => {}
         }
-        view
     }
 }
 
@@ -659,7 +564,7 @@ fn set_phase(progress: &Arc<Mutex<Progress>>, done: u64, total: u64, phase: &'st
 
 fn install_update(new_app: &Path, target: &Path, workdir: &Path) -> Result<(), String> {
     let script = workdir.join("instalar.sh");
-    let body = "#!/bin/sh\npid=$1\ntarget=$2\nnew=$3\ntmp=$4\nwhile kill -0 \"$pid\" 2>/dev/null; do sleep 0.2; done\nbackup=\"$target.old.$$\"\nrm -rf \"$backup\"\nif mv \"$target\" \"$backup\" 2>/dev/null; then\n  if ditto \"$new\" \"$target\"; then\n    xattr -dr com.apple.quarantine \"$target\" 2>/dev/null || true\n    rm -rf \"$backup\"\n    open \"$target\"\n  else\n    rm -rf \"$target\"\n    mv \"$backup\" \"$target\"\n    open \"$target\"\n  fi\nelse\n  open \"$target\"\nfi\nrm -rf \"$tmp\"\n";
+    let body = "#!/bin/sh\npid=$1\ntarget=$2\nnew=$3\ntmp=$4\nwhile kill -0 \"$pid\" 2>/dev/null; do sleep 0.2; done\nsleep 0.4\nbackup=\"$target.old.$$\"\nrm -rf \"$backup\"\nif mv \"$target\" \"$backup\" 2>/dev/null; then\n  if ditto \"$new\" \"$target\"; then\n    xattr -dr com.apple.quarantine \"$target\" 2>/dev/null || true\n    rm -rf \"$backup\"\n    open \"$target\"\n  else\n    rm -rf \"$target\"\n    mv \"$backup\" \"$target\"\n    open \"$target\"\n  fi\nelse\n  open \"$target\"\nfi\nrm -rf \"$tmp\"\n";
     std::fs::write(&script, body)
         .map_err(|e| format!("No se pudo preparar el instalador: {e}"))?;
     #[cfg(unix)]

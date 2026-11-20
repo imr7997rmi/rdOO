@@ -104,9 +104,8 @@ ditto --norsrc "$APP" "$ROOT/dist/rdOO.app"
 echo "OK: $ROOT/dist/rdOO.app (v$VERSION, compilación $BUILD)"
 
 if [ "$1" = "--install" ]; then
-  mkdir -p "$HOME/Applications"
-  rm -rf "$HOME/Applications/rdOO.app"
-  ditto --norsrc "$APP" "$HOME/Applications/rdOO.app"
-  codesign --verify "$HOME/Applications/rdOO.app" && echo "Instalado en ~/Applications/rdOO.app"
+  rm -rf "/Applications/rdOO.app"
+  ditto --norsrc "$APP" "/Applications/rdOO.app"
+  codesign --verify "/Applications/rdOO.app" && echo "Instalado en /Applications/rdOO.app"
 fi
 rm -rf "$(dirname "$APP")"

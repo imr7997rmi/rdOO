@@ -47,7 +47,7 @@ Requisitos: macOS 11+, Rust (`rustup`), Xcode Command Line Tools y cmake
 ```sh
 git clone <este repo> rdOO && cd rdOO
 scripts/bundle.sh --install
-open ~/Applications/rdOO.app
+open /Applications/rdOO.app
 ```
 
 La primera vez `bundle.sh` descarga IronRDP en `vendor/`, aplica `patches/` y compila (unos minutos).

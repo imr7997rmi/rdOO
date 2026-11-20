@@ -333,11 +333,17 @@ function renderGeneral() {
   const build = init.build ? ` <span class="hint">(compilación ${esc(init.build)})</span>` : "";
   f.innerHTML = `
     <h2>General</h2>
+    ${init.login === null || init.login === undefined ? "" : `
+    <h3>Inicio</h3>
+    <div class="checks">
+      <label><input type="checkbox" id="login" ${init.login ? "checked" : ""}><span>Abrir al iniciar sesión<small>rdOO se abre al entrar en tu cuenta del Mac</small></span></label>
+    </div>`}
     <h3>Actualizaciones</h3>
     <div class="row"><label>Versión</label><div>rdOO ${esc(init.version)}${build}</div></div>
     <div class="row"><label></label><div class="hint">Se comprueba el servidor de Nivvoo y se instala la última compilación disponible.</div></div>
     <div class="actions"><button id="check-updates" class="primary">Comprobar actualizaciones</button></div>
     <div class="hint" id="update-status" style="padding-left:130px;margin-top:10px"></div>`;
+  if ($("login")) $("login").onchange = (e) => send({ cmd: "set_login", on: e.target.checked });
   $("check-updates").onclick = () => {
     $("update-status").textContent = "Comprobando actualizaciones…";
     send({ cmd: "check_updates" });
@@ -428,6 +434,10 @@ window.rdooSaved = (ok, msg) => {
   else status("Error al guardar: " + msg);
 };
 window.rdooNotice = (msg) => status(msg);
+window.rdooLogin = (on) => {
+  init.login = on;
+  if ($("login")) $("login").checked = !!on;
+};
 window.rdooPwSaved = (acc) => {
   pw.add(acc); status("Contraseña guardada en el Llavero ✓");
   if (mode === "h") renderHost(); else renderLogin();

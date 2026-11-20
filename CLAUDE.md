@@ -4,7 +4,7 @@ Cliente RDP ligero para macOS. La app (`src/`) es un lanzador/gestor; la conexi�
 `ironrdp-viewer` de IronRDP, empaquetado dentro de `rdOO.app/Contents/MacOS/`.
 
 ## Compilar
-- `scripts/bundle.sh --install` → compila todo, firma ad-hoc e instala en `~/Applications/rdOO.app`.
+- `scripts/bundle.sh --install` → compila todo, firma ad-hoc e instala en `/Applications/rdOO.app`.
 - IronRDP se descarga en `vendor/IronRDP` fijado a `IRONRDP_REV` (bundle.sh) y se le aplica `patches/ironrdp-rdoo.patch`.
 - Tras tocar `vendor/IronRDP`, regenerar el parche: `git -C vendor/IronRDP diff > patches/ironrdp-rdoo.patch`.
 - Requiere cmake (para libopus). El bundle se firma fuera de Documents (iCloud añade xattrs que rompen codesign).
@@ -37,3 +37,6 @@ Cliente RDP ligero para macOS. La app (`src/`) es un lanzador/gestor; la conexi�
 
 ## Ideas pendientes
 - Portapapeles de imágenes/archivos, multimonitor, ajuste fino del teclado español, icono propio para la ventana del visor.
+
+## Abrir al iniciar sesión
+- `src/inicio.rs` (idéntico en fileOO, langOO y rdOO): `SMAppService.mainAppService` (macOS 13+; en 11-12 la opción se oculta). El estado se lee de macOS, no de la config. Casilla «Abrir al iniciar sesión» en Ajustes › General.

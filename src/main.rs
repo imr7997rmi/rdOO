@@ -2,11 +2,13 @@
 //! Lista de equipos en iCloud Drive, contraseñas en el Llavero,
 //! conexión mediante ironrdp-viewer (IronRDP).
 
+mod actualizacion_nativa;
 mod config;
 #[cfg(target_os = "macos")]
 mod dock;
 mod editor;
 mod icon;
+mod inicio;
 mod keychain;
 mod launch;
 mod launcher;
@@ -361,6 +363,22 @@ fn main() {
                             }
                         }
                     }
+                    Some("set_login") => {
+                        let on = v["on"].as_bool().unwrap_or(false);
+                        let msg = match inicio::fijar(on) {
+                            Ok(inicio::Cambio::Hecho) if on => "rdOO se abrirá al iniciar sesión.".to_string(),
+                            Ok(inicio::Cambio::Hecho) => "rdOO ya no se abrirá al iniciar sesión.".to_string(),
+                            Ok(inicio::Cambio::NecesitaAprobacion) => {
+                                "macOS pide aprobarlo en Ajustes del Sistema › General › Elementos de inicio de sesión."
+                                    .to_string()
+                            }
+                            Err(e) => format!("No se pudo cambiar el inicio automático: {e}"),
+                        };
+                        if let Some(ed) = &st.editor {
+                            ed.login_state();
+                            ed.notice(&msg);
+                        }
+                    }
                     Some("close") => st.editor = None,
                     _ => {}
                 }
@@ -370,7 +388,10 @@ fn main() {
             }
             Event::UserEvent(UserEvent::Update(ev)) => {
                 if st.update.handle_event(ev, target) {
+                    // Como fileOO: salir del proceso de forma explícita para que
+                    // el instalador sustituya el .app sin una instancia viva.
                     *control_flow = ControlFlow::Exit;
+                    std::process::exit(0);
                 }
             }
             Event::UserEvent(UserEvent::Menu(e)) => {
