@@ -12,6 +12,7 @@ mod inicio;
 mod keychain;
 mod launch;
 mod launcher;
+mod presencia;
 mod ui;
 mod update;
 
@@ -210,7 +211,13 @@ fn main() {
     #[cfg(target_os = "macos")]
     {
         use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
-        event_loop.set_activation_policy(ActivationPolicy::Regular);
+        // «Mostrar en el Dock» (Ajustes › General).
+        let politica = if presencia::Presencia::leer(true).dock {
+            ActivationPolicy::Regular
+        } else {
+            ActivationPolicy::Accessory
+        };
+        event_loop.set_activation_policy(politica);
     }
 
     let proxy = event_loop.create_proxy();
@@ -272,6 +279,8 @@ fn main() {
                     .with_tooltip(format!("rdOO {VERSION}"))
                     .build()
                     .expect("no se pudo crear el icono de la barra de menú");
+                // «Mostrar en la barra de menús» (Ajustes › General).
+                let _ = t.set_visible(presencia::Presencia::leer(true).barra);
                 st.tray = Some(t);
                 #[cfg(target_os = "macos")]
                 dock::install();
@@ -361,6 +370,22 @@ fn main() {
                             if let Some(e) = &st.editor {
                                 e.notice(&format!("Contraseña del usuario «{name}» eliminada del Llavero."));
                             }
+                        }
+                    }
+                    Some("set_presencia") => {
+                        let p = presencia::Presencia {
+                            dock: v["dock"].as_bool().unwrap_or(true),
+                            barra: v["barra"].as_bool().unwrap_or(true),
+                        }
+                        .normalizada();
+                        p.guardar();
+                        presencia::aplicar_dock(p.dock);
+                        if let Some(t) = &st.tray {
+                            let _ = t.set_visible(p.barra);
+                        }
+                        if let Some(ed) = &st.editor {
+                            ed.presencia_state();
+                            ed.focus();
                         }
                     }
                     Some("set_login") => {

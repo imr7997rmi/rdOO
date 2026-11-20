@@ -330,6 +330,7 @@ function renderLogin() {
 
 function renderGeneral() {
   const f = $("form");
+  const pres = init.presencia || { dock: true, barra: true };
   const build = init.build ? ` <span class="hint">(compilación ${esc(init.build)})</span>` : "";
   f.innerHTML = `
     <h2>General</h2>
@@ -338,12 +339,24 @@ function renderGeneral() {
     <div class="checks">
       <label><input type="checkbox" id="login" ${init.login ? "checked" : ""}><span>Abrir al iniciar sesión<small>rdOO se abre al entrar en tu cuenta del Mac</small></span></label>
     </div>`}
+    <h3>Presencia</h3>
+    <div class="checks">
+      <label><input type="checkbox" id="p-dock" ${pres.dock ? "checked" : ""}><span>Mostrar en el Dock<small>Icono de rdOO en el Dock</small></span></label>
+      <label><input type="checkbox" id="p-barra" ${pres.barra ? "checked" : ""} ${pres.dock ? "" : "disabled"}><span>Mostrar en la barra de menús<small>${pres.dock ? "Icono junto al reloj" : "Obligatorio si no está en el Dock"}</small></span></label>
+    </div>
     <h3>Actualizaciones</h3>
     <div class="row"><label>Versión</label><div>rdOO ${esc(init.version)}${build}</div></div>
     <div class="row"><label></label><div class="hint">Se comprueba el servidor de Nivvoo y se instala la última compilación disponible.</div></div>
     <div class="actions"><button id="check-updates" class="primary">Comprobar actualizaciones</button></div>
     <div class="hint" id="update-status" style="padding-left:130px;margin-top:10px"></div>`;
   if ($("login")) $("login").onchange = (e) => send({ cmd: "set_login", on: e.target.checked });
+  const enviarPres = () => {
+    const dock = $("p-dock").checked;
+    const barra = dock ? $("p-barra").checked : true;
+    send({ cmd: "set_presencia", dock, barra });
+  };
+  $("p-dock").onchange = enviarPres;
+  $("p-barra").onchange = enviarPres;
   $("check-updates").onclick = () => {
     $("update-status").textContent = "Comprobando actualizaciones…";
     send({ cmd: "check_updates" });
@@ -434,6 +447,10 @@ window.rdooSaved = (ok, msg) => {
   else status("Error al guardar: " + msg);
 };
 window.rdooNotice = (msg) => status(msg);
+window.rdooPresencia = (p) => {
+  init.presencia = p;
+  if (mode === "g") renderGeneral();
+};
 window.rdooLogin = (on) => {
   init.login = on;
   if ($("login")) $("login").checked = !!on;

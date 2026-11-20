@@ -40,10 +40,12 @@ impl Editor {
                 pw.insert(acc, serde_json::Value::Bool(true));
             }
         }
+        let presencia = crate::presencia::Presencia::leer(true);
         let init = serde_json::json!({
             "version": VERSION,
             "build": crate::update::current_build(),
             "login": crate::inicio::disponible().then(crate::inicio::activo),
+            "presencia": { "dock": presencia.dock, "barra": presencia.barra },
             "hosts": file.hosts,
             "logins": file.logins,
             "pw": pw
@@ -85,6 +87,14 @@ impl Editor {
     }
 
     /// Refleja en «General» el estado real de «Abrir al iniciar sesión».
+    /// Refleja en «General» las opciones de Dock y barra de menús.
+    pub fn presencia_state(&self) {
+        let p = crate::presencia::Presencia::leer(true);
+        let _ = self
+            .webview
+            .evaluate_script(&format!("rdooPresencia({})", serde_json::json!({ "dock": p.dock, "barra": p.barra })));
+    }
+
     pub fn login_state(&self) {
         let on = crate::inicio::disponible().then(crate::inicio::activo);
         let _ = self.webview.evaluate_script(&format!("rdooLogin({})", serde_json::json!(on)));

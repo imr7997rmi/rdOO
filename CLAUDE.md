@@ -40,3 +40,6 @@ Cliente RDP ligero para macOS. La app (`src/`) es un lanzador/gestor; la conexi�
 
 ## Abrir al iniciar sesión
 - `src/inicio.rs` (idéntico en fileOO, langOO y rdOO): `SMAppService.mainAppService` (macOS 13+; en 11-12 la opción se oculta). El estado se lee de macOS, no de la config. Casilla «Abrir al iniciar sesión» en Ajustes › General.
+
+## Dock y barra de menús
+- `src/presencia.rs` (idéntico en fileOO, langOO y rdOO): «Mostrar en el Dock» / «Mostrar en la barra de menús» en Ajustes › General. Se guarda en NSUserDefaults (`nivvooMostrarEnDock`, `nivvooMostrarEnBarraMenus`); sin Dock, la barra de menús es obligatoria. La política Regular/Accessory se aplica al arrancar y al cambiar la opción.
