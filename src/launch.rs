@@ -37,8 +37,22 @@ fn tail(path: &PathBuf, n: usize) -> String {
 }
 
 /// Lanza la conexión en un hilo propio (no bloquea el menú).
-pub fn connect(host: Host) {
+pub fn connect(mut host: Host) {
+    // «Escala remota: Automático» = la escala de la pantalla del Mac (Retina → 200 %).
+    // Windows respeta la escala que se pide al conectar; la que llega después en un
+    // cambio de tamaño a menudo la ignora, y en Retina se veía todo diminuto.
+    if host.scale.is_none() {
+        host.scale = escala_pantalla();
+    }
     std::thread::spawn(move || run(host));
+}
+
+/// Escala de la pantalla principal en % (100, 200…). Solo en el hilo principal.
+fn escala_pantalla() -> Option<u32> {
+    let mtm = objc2::MainThreadMarker::new()?;
+    let pantalla = objc2_app_kit::NSScreen::mainScreen(mtm)?;
+    let f = pantalla.backingScaleFactor();
+    (f > 1.0).then(|| ((f * 100.0).round() as u32).clamp(100, 500))
 }
 
 fn run(host: Host) {
