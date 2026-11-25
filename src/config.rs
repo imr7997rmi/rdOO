@@ -98,9 +98,6 @@ impl Host {
         if let Some(h) = self.height {
             a.extend(["--desktop-height".into(), h.to_string()]);
         }
-        if let Some(s) = self.scale {
-            a.extend(["--scale-desktop".into(), s.to_string()]);
-        }
         if self.udp {
             a.push("--udp".into());
         }

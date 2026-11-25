@@ -38,48 +38,21 @@ fn tail(path: &PathBuf, n: usize) -> String {
 
 /// Lanza la conexión en un hilo propio (no bloquea el menú).
 pub fn connect(mut host: Host) {
-    // «Escala remota: Automático» = la escala de la pantalla del Mac (Retina → 200 %).
-    // Windows respeta la escala que se pide al conectar; la que llega después en un
-    // cambio de tamaño a menudo la ignora, y en Retina se veía todo diminuto.
+    // «Tamaño de textos e iconos: Automático» = la escala de la pantalla del Mac.
     if host.scale.is_none() {
         host.scale = escala_pantalla();
     }
     std::thread::spawn(move || run(host));
 }
 
-#[repr(C)]
-struct CGSize {
-    width: f64,
-    height: f64,
-}
-
-#[link(name = "CoreGraphics", kind = "framework")]
-unsafe extern "C" {
-    fn CGMainDisplayID() -> u32;
-    fn CGDisplayScreenSize(display: u32) -> CGSize;
-}
-
-/// Escala automática en % para Windows, como hace Jump Desktop:
-/// - pantalla Retina (2x) → 200 %;
-/// - pantalla normal (1x) → según su densidad real: Windows usa 96 ppp al 100 %,
-///   así que un monitor de ~110 ppp va a 125 % y uno 4K escalado, a 150 % o más.
-/// Solo en el hilo principal.
+/// Ampliación automática en %: la escala de la pantalla del Mac (Retina → 200 %,
+/// pantalla normal → 100 %). Así Windows se ve igual de grande que el Mac, como en
+/// Jump Desktop. Solo en el hilo principal.
 fn escala_pantalla() -> Option<u32> {
     let mtm = objc2::MainThreadMarker::new()?;
     let pantalla = objc2_app_kit::NSScreen::mainScreen(mtm)?;
     let f = pantalla.backingScaleFactor();
-    if f > 1.0 {
-        return Some(((f * 100.0).round() as u32).clamp(100, 500));
-    }
-    // SAFETY: funciones de CoreGraphics sin efectos secundarios.
-    let mm = unsafe { CGDisplayScreenSize(CGMainDisplayID()) };
-    let puntos = pantalla.frame().size.width;
-    if mm.width <= 0.0 || puntos <= 0.0 {
-        return None;
-    }
-    let ppp = puntos / (mm.width / 25.4);
-    let pct = (ppp / 96.0 * 100.0 / 25.0).round() * 25.0;
-    Some((pct as u32).clamp(100, 300))
+    Some(((f * 100.0).round() as u32).clamp(100, 500))
 }
 
 fn run(host: Host) {
@@ -126,8 +99,11 @@ fn run(host: Host) {
         }
     }
     cmd.args(host.viewer_args());
+    // Ampliación: el escritorio de Windows se pide más pequeño que la ventana y se
+    // amplía al dibujarlo (Windows al 100 %). Funciona con todas las apps, también
+    // las que ignoran la escala de Windows (Velneo).
     if let Some(s) = host.scale {
-        cmd.env("RDOO_SCALE", s.to_string());
+        cmd.env("RDOO_ZOOM", s.to_string());
     }
     if !host.cmd_is_windows {
         cmd.env("RDOO_CMD_AS_CTRL", "1");
