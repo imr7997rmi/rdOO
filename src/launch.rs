@@ -47,12 +47,39 @@ pub fn connect(mut host: Host) {
     std::thread::spawn(move || run(host));
 }
 
-/// Escala de la pantalla principal en % (100, 200…). Solo en el hilo principal.
+#[repr(C)]
+struct CGSize {
+    width: f64,
+    height: f64,
+}
+
+#[link(name = "CoreGraphics", kind = "framework")]
+unsafe extern "C" {
+    fn CGMainDisplayID() -> u32;
+    fn CGDisplayScreenSize(display: u32) -> CGSize;
+}
+
+/// Escala automática en % para Windows, como hace Jump Desktop:
+/// - pantalla Retina (2x) → 200 %;
+/// - pantalla normal (1x) → según su densidad real: Windows usa 96 ppp al 100 %,
+///   así que un monitor de ~110 ppp va a 125 % y uno 4K escalado, a 150 % o más.
+/// Solo en el hilo principal.
 fn escala_pantalla() -> Option<u32> {
     let mtm = objc2::MainThreadMarker::new()?;
     let pantalla = objc2_app_kit::NSScreen::mainScreen(mtm)?;
     let f = pantalla.backingScaleFactor();
-    (f > 1.0).then(|| ((f * 100.0).round() as u32).clamp(100, 500))
+    if f > 1.0 {
+        return Some(((f * 100.0).round() as u32).clamp(100, 500));
+    }
+    // SAFETY: funciones de CoreGraphics sin efectos secundarios.
+    let mm = unsafe { CGDisplayScreenSize(CGMainDisplayID()) };
+    let puntos = pantalla.frame().size.width;
+    if mm.width <= 0.0 || puntos <= 0.0 {
+        return None;
+    }
+    let ppp = puntos / (mm.width / 25.4);
+    let pct = (ppp / 96.0 * 100.0 / 25.0).round() * 25.0;
+    Some((pct as u32).clamp(100, 300))
 }
 
 fn run(host: Host) {
@@ -99,6 +126,9 @@ fn run(host: Host) {
         }
     }
     cmd.args(host.viewer_args());
+    if let Some(s) = host.scale {
+        cmd.env("RDOO_SCALE", s.to_string());
+    }
     if !host.cmd_is_windows {
         cmd.env("RDOO_CMD_AS_CTRL", "1");
     }
