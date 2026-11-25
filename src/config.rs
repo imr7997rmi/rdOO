@@ -26,6 +26,9 @@ pub struct Host {
     /// Escalado del escritorio remoto en % (100–500)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<u32>,
+    /// Modo «Nítido»: usar la escala de Windows en vez de ampliar la imagen en el Mac.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub escala_nitida: bool,
     /// Transporte UDP (más fluido con mala red)
     #[serde(default, skip_serializing_if = "is_false")]
     pub udp: bool,

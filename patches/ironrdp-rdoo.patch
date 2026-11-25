@@ -48,10 +48,10 @@ index 3f28e59..9d66fe1 100644
  ironrdp-cliprdr-native = { path = "../ironrdp-cliprdr-native", version = "0.8" }
  ironrdp-rdpdr-native = { path = "../ironrdp-rdpdr-native", version = "0.8" }
 diff --git a/crates/ironrdp-viewer/src/app.rs b/crates/ironrdp-viewer/src/app.rs
-index 79f3fd0..5bc37e8 100644
+index 79f3fd0..22f9283 100644
 --- a/crates/ironrdp-viewer/src/app.rs
 +++ b/crates/ironrdp-viewer/src/app.rs
-@@ -295,10 +295,28 @@ impl RpcApp {
+@@ -295,10 +295,36 @@ impl RpcApp {
          // The viewer window spans a single monitor, so the session gets one primary monitor at the
          // window DPI. A scale outside 100..=500 percent is clamped when the layout is encoded.
          #[expect(clippy::as_conversions, reason = "casting f64 to u32")]
@@ -72,7 +72,15 @@ index 79f3fd0..5bc37e8 100644
 +                ),
 +                100,
 +            ),
-+            None => (size, (window.scale_factor() * 100.0).round() as u32),
++            // rdOO, modo «Nítido»: RDOO_SCALE fija la escala de Windows (se mantiene al
++            // redimensionar); sin ella, la escala de la pantalla del Mac.
++            None => (
++                size,
++                std::env::var("RDOO_SCALE")
++                    .ok()
++                    .and_then(|v| v.parse::<u32>().ok())
++                    .unwrap_or_else(|| (window.scale_factor() * 100.0).round() as u32),
++            ),
 +        };
  
          let width = u16::try_from(size.width).expect("reasonable width");
@@ -81,7 +89,7 @@ index 79f3fd0..5bc37e8 100644
  
          match &self.input_target {
              InputTarget::Direct(input_event_sender) => match input_event_sender.try_send(RdpInputEvent::Resize {
-@@ -403,9 +421,17 @@ impl RpcApp {
+@@ -403,9 +429,17 @@ impl RpcApp {
          if self.remote_app || self.window.is_some() {
              return;
          }
@@ -102,7 +110,7 @@ index 79f3fd0..5bc37e8 100644
          match event_loop.create_window(window_attributes) {
              Ok(window) => {
                  let window = Arc::new(window);
-@@ -438,14 +464,14 @@ impl RpcApp {
+@@ -438,14 +472,14 @@ impl RpcApp {
          match event {
              WindowEvent::Resized(size) => {
                  self.last_size = Some(size);
@@ -119,7 +127,7 @@ index 79f3fd0..5bc37e8 100644
              }
              WindowEvent::CloseRequested => match &self.input_target {
                  InputTarget::Direct(input_event_sender) => input_event_sender.request_graceful_close(),
-@@ -967,11 +993,18 @@ fn forward_input_event(
+@@ -967,11 +1001,18 @@ fn forward_input_event(
              // > key being pressed and on some platforms like Wayland/X11 which key resulted
              // > in modifiers change is hidden, also, not that it really matters.
              let state = modifiers.state();

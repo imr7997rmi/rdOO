@@ -102,8 +102,15 @@ fn run(host: Host) {
     // Ampliación: el escritorio de Windows se pide más pequeño que la ventana y se
     // amplía al dibujarlo (Windows al 100 %). Funciona con todas las apps, también
     // las que ignoran la escala de Windows (Velneo).
+    // Modo «Nítido»: Windows escala textos e iconos (más definido en Retina, pero solo
+    // con programas que se adaptan a la escala de Windows).
     if let Some(s) = host.scale {
-        cmd.env("RDOO_ZOOM", s.to_string());
+        if host.escala_nitida {
+            cmd.arg("--scale-desktop").arg(s.to_string());
+            cmd.env("RDOO_SCALE", s.to_string());
+        } else {
+            cmd.env("RDOO_ZOOM", s.to_string());
+        }
     }
     if !host.cmd_is_windows {
         cmd.env("RDOO_CMD_AS_CTRL", "1");

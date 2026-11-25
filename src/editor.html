@@ -242,6 +242,7 @@ function bind(f, obj, after) {
       else if (k === "args") v = el.value.trim() ? el.value.trim().split(/\s+/) : [];
       else v = el.value;
       if ((k === "domain" || k === "login") && v === "") v = null;
+      if (k === "escala_nitida") v = el.value === "1";
       const prev = obj[k];
       obj[k] = v;
       setDirty(true);
@@ -277,6 +278,15 @@ function renderHost() {
       </div>
       <div class="hint">Tamaño con el que se abre la ventana. Vacío = tamaño por defecto. Después puedes cambiarla arrastrando la esquina.</div>
     </div></div>
+    <div class="row"><label>Modo de escalado</label><div>
+      <select data-k="escala_nitida">
+        <option value="" ${h.escala_nitida ? "" : "selected"}>Ampliar (compatible) · recomendado</option>
+        <option value="1" ${h.escala_nitida ? "selected" : ""}>Nítido (escala de Windows)</option>
+      </select>
+      <div class="hint">${h.escala_nitida
+        ? "Windows agranda sus textos e iconos: más definido en pantallas Retina, pero algunos programas antiguos (p. ej. Velneo) se quedan pequeños."
+        : "Se amplía la imagen de Windows en el Mac, como Jump Desktop: todo se ve del mismo tamaño, también los programas antiguos. En Retina, algo menos definido."}</div>
+    </div></div>
     <div class="row"><label>Tamaño de textos e iconos</label><div>
       <select data-k="scale">
         ${scales.map(([v, t]) => `<option value="${v}" ${String(h.scale ?? "") === String(v) ? "selected" : ""}>${t}</option>`).join("")}
@@ -305,7 +315,7 @@ function renderHost() {
       <button id="remove" class="danger">Eliminar conexión</button>
     </div>`;
   bind(f, h, (k, v) => {
-    if (k === "login") { renderHost(); renderList(); return; }
+    if (k === "login" || k === "escala_nitida") { renderHost(); renderList(); return; }
     if (k === "name") f.querySelector("h2").textContent = v || "Nueva conexión";
     if (k === "name" || k === "address" || k === "user") renderList();
   });
@@ -385,7 +395,7 @@ function cleanH(h) {
   if (h.login) o.login = h.login;
   else { o.user = (h.user || "").trim(); if (h.domain) o.domain = h.domain.trim(); }
   for (const k of ["width", "height", "scale"]) if (Number.isInteger(h[k])) o[k] = h[k];
-  for (const k of ["udp", "microphone", "local_cursor", "no_h264", "no_clipboard", "cmd_is_windows", "admin"]) if (h[k]) o[k] = true;
+  for (const k of ["udp", "microphone", "local_cursor", "no_h264", "no_clipboard", "cmd_is_windows", "admin", "escala_nitida"]) if (h[k]) o[k] = true;
   if (h.args && h.args.length) o.args = h.args;
   return o;
 }
