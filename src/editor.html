@@ -34,8 +34,8 @@ aside { background: var(--side); display: flex; flex-direction: column; min-heig
 main { padding: 18px 28px; overflow: auto; }
 h2 { margin: 0 0 18px; font-size: 17px; font-weight: 600; }
 h3 { margin: 18px 0 8px; font-size: 11px; font-weight: 500; color: var(--muted); }
-.row { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 10px; margin-bottom: 8px; }
-.row label { color: var(--muted); }
+.row { display: grid; grid-template-columns: 150px 1fr; align-items: start; gap: 10px; margin-bottom: 8px; }
+.row label { color: var(--muted); padding-top: 6px; }
 .pair { display: flex; gap: 8px; align-items: center; color: var(--muted); }
 .pair input { width: 90px; }
 input[type=text], input[type=number], input[type=password], select {
@@ -52,7 +52,7 @@ select {
   background-repeat: no-repeat; background-position: right 10px center;
 }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
-.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding-left: 130px; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding-left: 160px; }
 .checks label { display: flex; gap: 8px; align-items: flex-start; }
 .checks input { accent-color: var(--accent); margin-top: 2px; }
 .checks small { display: block; color: var(--muted); font-size: 11px; }
@@ -64,7 +64,7 @@ button:active { opacity: .7; }
 button.primary { background: var(--accent); color: var(--accent-text); }
 button.danger { background: none; color: var(--danger); }
 button:disabled { opacity: .35; }
-.actions { display: flex; gap: 8px; padding-left: 130px; margin-top: 18px; }
+.actions { display: flex; gap: 8px; padding-left: 160px; margin-top: 18px; }
 footer { grid-column: 1 / 3; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
 footer .status { flex: 1; color: var(--muted); }
 footer .ver { color: var(--muted); font-size: 11px; }
@@ -74,7 +74,7 @@ footer .ver { color: var(--muted); font-size: 11px; }
 .seg { display: flex; margin: 10px 8px 2px; background: var(--field); border-radius: 8px; padding: 2px; }
 .seg button { flex: 1; background: none; padding: 4px 0; border-radius: 6px; color: var(--muted); font-size: 12px; }
 .seg button.on { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.used { color: var(--muted); font-size: 12px; line-height: 1.6; padding-left: 130px; }
+.used { color: var(--muted); font-size: 12px; line-height: 1.6; padding-left: 160px; }
 </style>
 </head>
 <body>
@@ -220,7 +220,16 @@ function connectHost(i) {
   send({ cmd: "connect", host: cleanH(hosts[i]), logins: logins.map(cleanL) });
 }
 
-const scales = [["", "Automático (como el Mac)"], [100, "100 %"], [125, "125 %"], [150, "150 %"], [175, "175 %"], [200, "200 %"], [250, "250 %"], [300, "300 %"]];
+const scales = [
+  ["", "Automático (recomendado)"],
+  [100, "Muy pequeño · 100 %"],
+  [125, "Pequeño · 125 %"],
+  [150, "Mediano · 150 %"],
+  [175, "Algo grande · 175 %"],
+  [200, "Grande · 200 %"],
+  [250, "Muy grande · 250 %"],
+  [300, "Enorme · 300 %"],
+];
 
 function bind(f, obj, after) {
   f.querySelectorAll("[data-k]").forEach((el) => {
@@ -261,13 +270,19 @@ function renderHost() {
     <div class="row"><label>Dominio</label><input type="text" data-k="domain" value="${esc(h.domain)}" placeholder="opcional"></div>
     ${pwRow(account(h))}`}
     <h3>Pantalla</h3>
-    <div class="row"><label>Tamaño inicial</label><div class="pair">
-      <input type="number" data-k="width" value="${h.width ?? ""}" placeholder="ancho"> ×
-      <input type="number" data-k="height" value="${h.height ?? ""}" placeholder="alto">
-      <span class="hint">puntos</span></div></div>
-    <div class="row"><label>Escala remota</label><select data-k="scale">
-      ${scales.map(([v, t]) => `<option value="${v}" ${String(h.scale ?? "") === String(v) ? "selected" : ""}>${t}</option>`).join("")}
-    </select></div>
+    <div class="row"><label>Tamaño de la ventana</label><div>
+      <div class="pair">
+        <input type="number" data-k="width" value="${h.width ?? ""}" placeholder="ancho"> ×
+        <input type="number" data-k="height" value="${h.height ?? ""}" placeholder="alto">
+      </div>
+      <div class="hint">Tamaño con el que se abre la ventana. Vacío = tamaño por defecto. Después puedes cambiarla arrastrando la esquina.</div>
+    </div></div>
+    <div class="row"><label>Tamaño de textos e iconos</label><div>
+      <select data-k="scale">
+        ${scales.map(([v, t]) => `<option value="${v}" ${String(h.scale ?? "") === String(v) ? "selected" : ""}>${t}</option>`).join("")}
+      </select>
+      <div class="hint">Lo grandes que se ven las letras e iconos de Windows. «Automático» usa el mismo tamaño que tu Mac. Si lo ves pequeño, elige uno mayor. Se aplica la próxima vez que conectes.</div>
+    </div></div>
     <h3>Opciones</h3>
     <div class="checks">
       <label><input type="checkbox" data-k="udp" ${h.udp ? "checked" : ""}><span>UDP<small>Más fluido con mala red</small></span></label>
