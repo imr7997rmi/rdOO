@@ -48,7 +48,7 @@ index 3f28e59..9d66fe1 100644
  ironrdp-cliprdr-native = { path = "../ironrdp-cliprdr-native", version = "0.8" }
  ironrdp-rdpdr-native = { path = "../ironrdp-rdpdr-native", version = "0.8" }
 diff --git a/crates/ironrdp-viewer/src/app.rs b/crates/ironrdp-viewer/src/app.rs
-index 79f3fd0..22f9283 100644
+index 79f3fd0..2f57193 100644
 --- a/crates/ironrdp-viewer/src/app.rs
 +++ b/crates/ironrdp-viewer/src/app.rs
 @@ -295,10 +295,36 @@ impl RpcApp {
@@ -89,7 +89,58 @@ index 79f3fd0..22f9283 100644
  
          match &self.input_target {
              InputTarget::Direct(input_event_sender) => match input_event_sender.try_send(RdpInputEvent::Resize {
-@@ -403,9 +429,17 @@ impl RpcApp {
+@@ -365,10 +391,49 @@ impl RpcApp {
+         if self.buffer.is_empty() {
+             return;
+         }
+-        let Some((_, surface)) = self.window.as_mut() else {
++        let Some((window, surface)) = self.window.as_mut() else {
+             return;
+         };
++        // rdOO (modo «Ampliar»): el escritorio remoto es más pequeño que la ventana; en macOS
++        // softbuffer no estira la imagen, así que se amplía aquí al tamaño real de la ventana.
++        let (bw, bh) = (usize::from(self.buffer_size.0), usize::from(self.buffer_size.1));
++        let win = window.inner_size();
++        let (ww, wh) = (win.width as usize, win.height as usize);
++        let ampliar = std::env::var_os("RDOO_ZOOM").is_some()
++            && ww > 0
++            && wh > 0
++            && bw > 0
++            && bh > 0
++            && (ww, wh) != (bw, bh)
++            && self.buffer.len() >= bw * bh;
++        if ampliar {
++            if let (Some(w), Some(h)) = (NonZeroU32::new(win.width), NonZeroU32::new(win.height)) {
++                surface.resize(w, h).expect("surface resize");
++            }
++            let mut sb_buffer = surface.buffer_mut().expect("surface buffer");
++            if sb_buffer.len() < ww * wh {
++                return;
++            }
++            let columnas: Vec<usize> = (0..ww).map(|x| (x * bw / ww).min(bw - 1)).collect();
++            for y in 0..wh {
++                let sy = (y * bh / wh).min(bh - 1);
++                let origen = &self.buffer[sy * bw..sy * bw + bw];
++                let destino = &mut sb_buffer[y * ww..y * ww + ww];
++                for (d, &sx) in destino.iter_mut().zip(columnas.iter()) {
++                    *d = origen[sx];
++                }
++            }
++            sb_buffer.present().expect("buffer present");
++            return;
++        }
++        if let (Some(w), Some(h)) = (NonZeroU32::new(bw as u32), NonZeroU32::new(bh as u32)) {
++            // Vuelve al tamaño del escritorio si antes se amplió.
++            let _ = surface.resize(w, h);
++        }
+         let mut sb_buffer = surface.buffer_mut().expect("surface buffer");
++        if sb_buffer.len() != self.buffer.len() {
++            return;
++        }
+         sb_buffer.copy_from_slice(self.buffer.as_slice());
+         sb_buffer.present().expect("buffer present");
+     }
+@@ -403,9 +468,17 @@ impl RpcApp {
          if self.remote_app || self.window.is_some() {
              return;
          }
@@ -110,12 +161,14 @@ index 79f3fd0..22f9283 100644
          match event_loop.create_window(window_attributes) {
              Ok(window) => {
                  let window = Arc::new(window);
-@@ -438,14 +472,14 @@ impl RpcApp {
+@@ -438,14 +511,16 @@ impl RpcApp {
          match event {
              WindowEvent::Resized(size) => {
                  self.last_size = Some(size);
 -                self.resize_timeout = Some(Instant::now() + Duration::from_secs(1));
 +                self.resize_timeout = Some(Instant::now() + Duration::from_millis(400));
++                // rdOO: redibujar ya (la imagen se estira mientras llega la nueva resolución).
++                window.request_redraw();
              }
              WindowEvent::ScaleFactorChanged { .. } => {
                  // The window moved to a monitor with another DPI, or the monitor DPI changed.
@@ -127,7 +180,7 @@ index 79f3fd0..22f9283 100644
              }
              WindowEvent::CloseRequested => match &self.input_target {
                  InputTarget::Direct(input_event_sender) => input_event_sender.request_graceful_close(),
-@@ -967,11 +1001,18 @@ fn forward_input_event(
+@@ -967,11 +1042,18 @@ fn forward_input_event(
              // > key being pressed and on some platforms like Wayland/X11 which key resulted
              // > in modifiers change is hidden, also, not that it really matters.
              let state = modifiers.state();
