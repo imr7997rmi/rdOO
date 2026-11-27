@@ -369,6 +369,17 @@ function renderGeneral() {
       <label><input type="checkbox" id="p-dock" ${pres.dock ? "checked" : ""}><span>Mostrar en el Dock<small>Icono de rdOO en el Dock</small></span></label>
       <label><input type="checkbox" id="p-barra" ${pres.barra ? "checked" : ""} ${pres.dock ? "" : "disabled"}><span>Mostrar en la barra de menús<small>${pres.dock ? "Icono junto al reloj" : "Obligatorio si no está en el Dock"}</small></span></label>
     </div>
+    <h3>Conexiones y usuarios</h3>
+    <div class="row"><label>Archivo</label><div>
+      <div style="word-break:break-all">${esc(init.cfg_path || "")}</div>
+      <div class="hint">Se sincroniza entre tus Macs por iCloud Drive. Las contraseñas no van en el archivo: están en el Llavero de cada Mac.</div>
+    </div></div>
+    <div class="actions">
+      <button id="cfg-export">Exportar…</button>
+      <button id="cfg-import">Importar…</button>
+      <button id="cfg-reveal">Mostrar en Finder</button>
+      <button id="cfg-open">Abrir</button>
+    </div>
     <h3>Actualizaciones</h3>
     <div class="row"><label>Versión</label><div>rdOO ${esc(init.version)}${build}</div></div>
     <div class="row"><label></label><div class="hint">Se comprueba el servidor de Nivvoo y se instala la última compilación disponible.</div></div>
@@ -382,6 +393,13 @@ function renderGeneral() {
   };
   $("p-dock").onchange = enviarPres;
   $("p-barra").onchange = enviarPres;
+  $("cfg-export").onclick = () => send({ cmd: "cfg_export" });
+  $("cfg-import").onclick = () => {
+    if (dirty) { status("Guarda o descarta los cambios antes de importar."); return; }
+    send({ cmd: "cfg_import" });
+  };
+  $("cfg-reveal").onclick = () => send({ cmd: "cfg_reveal" });
+  $("cfg-open").onclick = () => send({ cmd: "cfg_open" });
   $("check-updates").onclick = () => {
     $("update-status").textContent = "Comprobando actualizaciones…";
     send({ cmd: "check_updates" });

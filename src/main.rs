@@ -3,6 +3,7 @@
 //! conexión mediante ironrdp-viewer (IronRDP).
 
 mod actualizacion_nativa;
+mod archivo;
 mod config;
 #[cfg(target_os = "macos")]
 mod dock;
@@ -321,6 +322,53 @@ fn main() {
                     }
                     Some("settings") => open_editor(&mut st),
                     Some("check_updates") => st.update.check(target),
+                    Some("cfg_open") => ui::open_text(&cfg_path),
+                    Some("cfg_reveal") => {
+                        let _ = std::process::Command::new("open").arg("-R").arg(&cfg_path).spawn();
+                    }
+                    Some("cfg_export") => {
+                        let msg = match archivo::exportar(&cfg_path) {
+                            Ok(Some(p)) => format!("Exportado a {}", p.display()),
+                            Ok(None) => String::new(),
+                            Err(e) => format!("No se pudo exportar: {e}"),
+                        };
+                        if let Some(ed) = &st.editor {
+                            ed.focus();
+                            if !msg.is_empty() {
+                                ed.notice(&msg);
+                            }
+                        }
+                    }
+                    Some("cfg_import") => {
+                        if let Some(origen) = archivo::elegir_para_importar() {
+                            match config::load(&origen) {
+                                Err(e) => actualizacion_nativa::alerta("No se pudo importar", &e, "OK", true),
+                                Ok(nuevo) => {
+                                    let texto = format!(
+                                        "El archivo tiene {} conexiones y {} usuarios. Sustituirán a los actuales \
+                                         (se guarda una copia como hosts.toml.bak). Las contraseñas no cambian.",
+                                        nuevo.hosts.len(),
+                                        nuevo.logins.len()
+                                    );
+                                    if actualizacion_nativa::confirmar("¿Importar conexiones?", &texto, "Importar", "Cancelar") {
+                                        let _ = std::fs::copy(&cfg_path, cfg_path.with_extension("toml.bak"));
+                                        match config::save(&cfg_path, &nuevo) {
+                                            Ok(()) => {
+                                                st.reload(&cfg_path);
+                                                // Reabrir Ajustes con los datos nuevos.
+                                                st.editor = None;
+                                                open_editor(&mut st);
+                                                if let Some(ed) = &st.editor {
+                                                    ed.notice("Conexiones importadas ✓");
+                                                }
+                                            }
+                                            Err(e) => actualizacion_nativa::alerta("No se pudo importar", &e, "OK", true),
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Some("save") => {
                         let res = serde_json::from_value::<Vec<Host>>(v["hosts"].clone())
                             .map_err(|e| e.to_string())

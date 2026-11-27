@@ -43,6 +43,7 @@ impl Editor {
         let presencia = crate::presencia::Presencia::leer(true);
         let init = serde_json::json!({
             "version": VERSION,
+            "cfg_path": crate::config::config_path().display().to_string(),
             "build": crate::update::current_build(),
             "login": crate::inicio::disponible().then(crate::inicio::activo),
             "presencia": { "dock": presencia.dock, "barra": presencia.barra },
